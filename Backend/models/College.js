@@ -48,3 +48,4 @@ collegeSchema.index({ name: 'text', abbreviation: 'text' });
 export const College = mongoose.model('College', collegeSchema);
 
 
+

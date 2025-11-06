@@ -198,6 +198,21 @@ export const experiencesAPI = {
 
 // API endpoints for learnings
 export const learningsAPI = {
+  // Generate AI-based plan
+  generateAIPlan: async ({ technology, totalDays, dailyHours, explanationType }) => {
+    try {
+      const response = await apiClient.post('/learnings/generate', {
+        technology,
+        totalDays,
+        dailyHours,
+        explanationType,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error generating AI plan:', error);
+      throw error;
+    }
+  },
   // Get all learning plans
   getAllPlans: async (userId = null) => {
     try {

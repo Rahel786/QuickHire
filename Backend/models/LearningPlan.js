@@ -107,3 +107,4 @@ learningPlanSchema.index({ 'technologies.name': 1 });
 export const LearningPlan = mongoose.model('LearningPlan', learningPlanSchema);
 
 
+

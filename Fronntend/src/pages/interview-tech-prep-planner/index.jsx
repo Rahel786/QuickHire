@@ -205,15 +205,46 @@ const InterviewTechPrepPlanner = () => {
     setCurrentStep('configure');
   };
 
-  const handleConfigSubmit = (config) => {
+  const handleConfigSubmit = async (config) => {
     setPlanConfig(config);
-    const dailyPlans = generateDailyPlan(selectedTech, config?.totalDays, config?.dailyHours, config?.explanationType);
-    setGeneratedPlan({
-      technology: selectedTech,
-      config,
-      dailyPlans
-    });
     setCurrentStep('generate');
+    setLoading(true);
+    try {
+      // Try AI-backed generation via backend
+      const ai = await learningsAPI.generateAIPlan({
+        technology: selectedTech,
+        totalDays: config?.totalDays,
+        dailyHours: config?.dailyHours,
+        explanationType: config?.explanationType,
+      });
+      if (ai && ai.dailyPlans && ai.dailyPlans.length) {
+        setGeneratedPlan({
+          technology: ai.technology || selectedTech,
+          config: ai.config || config,
+          dailyPlans: ai.dailyPlans,
+        });
+        setCurrentStep('generate');
+      } else {
+        // Fallback: local static generation only if AI returned no usable data
+        const dailyPlans = generateDailyPlan(selectedTech, config?.totalDays, config?.dailyHours, config?.explanationType);
+        setGeneratedPlan({
+          technology: selectedTech,
+          config,
+          dailyPlans
+        });
+      }
+    } catch (e) {
+      console.log('AI generation failed, falling back to static generator:', e);
+      // Fallback: local static generation on error
+      const dailyPlans = generateDailyPlan(selectedTech, config?.totalDays, config?.dailyHours, config?.explanationType);
+      setGeneratedPlan({
+        technology: selectedTech,
+        config,
+        dailyPlans
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSavePlan = async () => {
@@ -365,12 +396,20 @@ const InterviewTechPrepPlanner = () => {
         )}
         
         {currentStep === 'generate' && (
-          <GeneratedPlan
-            plan={generatedPlan}
-            onSave={handleSavePlan}
-            onBack={() => setCurrentStep('configure')}
-            loading={loading}
-          />
+          generatedPlan ? (
+            <GeneratedPlan
+              plan={generatedPlan}
+              onSave={handleSavePlan}
+              onBack={() => setCurrentStep('configure')}
+              loading={loading}
+            />
+          ) : (
+            <div className="bg-white rounded-lg shadow-sm border p-12 flex flex-col items-center justify-center text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
+              <h3 className="text-lg font-semibold text-gray-900">Generating your plan…</h3>
+              <p className="text-sm text-gray-500 mt-1">This usually takes a few seconds.</p>
+            </div>
+          )
         )}
         
         {currentStep === 'view' && (

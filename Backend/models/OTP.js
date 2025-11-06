@@ -41,3 +41,4 @@ otpSchema.index({ email: 1, type: 1, is_verified: 1 });
 
 export const OTP = mongoose.model('OTP', otpSchema);
 
+
