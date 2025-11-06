@@ -28,6 +28,7 @@ export const connectDB = async () => {
 const seedInitialData = async () => {
   try {
     const { College } = await import('../models/College.js');
+    const { User } = await import('../models/User.js');
     
     // Check if colleges exist
     const collegeCount = await College.countDocuments();
@@ -63,6 +64,21 @@ const seedInitialData = async () => {
       ];
       await College.insertMany(colleges);
       console.log('📚 Seeded colleges data');
+    }
+    // Ensure a demo user exists for login
+    const demoEmail = process.env.DEMO_EMAIL || 'demo@quickhire.com';
+    const existingDemo = await User.findOne({ email: demoEmail });
+    if (!existingDemo) {
+      const demoUser = new User({
+        email: demoEmail,
+        password: process.env.DEMO_PASSWORD || 'demo123',
+        name: process.env.DEMO_NAME || 'Demo User',
+        role: 'student',
+        college: 'IIT Delhi',
+        batch_year: 2025
+      });
+      await demoUser.save();
+      console.log(`👤 Seeded demo user: ${demoEmail} / ${process.env.DEMO_PASSWORD || 'demo123'}`);
     }
   } catch (error) {
     console.error('Error seeding data:', error);

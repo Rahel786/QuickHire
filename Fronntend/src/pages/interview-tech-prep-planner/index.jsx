@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Brain, Calendar, CheckCircle, Plus, BookOpen, Code, Database, Target } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import Header from '../../components/ui/Header';
@@ -12,6 +13,7 @@ import { learningsAPI } from '../../utils/api';
 
 const InterviewTechPrepPlanner = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState('select'); // select, configure, generate, view
   const [selectedTech, setSelectedTech] = useState(null);
   const [planConfig, setPlanConfig] = useState({
@@ -206,6 +208,10 @@ const InterviewTechPrepPlanner = () => {
   };
 
   const handleConfigSubmit = async (config) => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
     setPlanConfig(config);
     setCurrentStep('generate');
     setLoading(true);
