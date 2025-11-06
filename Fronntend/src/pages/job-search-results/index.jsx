@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Helmet } from 'react-helmet';
+import { Helmet } from 'react-helmet-async';
 import Header from '../../components/ui/Header';
 import JobCard from './components/JobCard';
 import FilterPanel from './components/FilterPanel';
