@@ -1,5 +1,6 @@
 import express from 'express';
 import { Experience } from '../models/Experience.js';
+import { requireAuth } from '../middleware/auth.js';
 import { College } from '../models/College.js';
 
 const router = express.Router();
@@ -78,10 +79,10 @@ router.get('/colleges/:collegeName', async (req, res) => {
 });
 
 // Create new experience
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const experienceData = req.body;
-    const userId = req.headers['user-id'] || req.user?.id;
+    const userId = req.user?.id || req.headers['user-id'];
 
     if (!userId) {
       return res.status(401).json({ error: 'User authentication required' });

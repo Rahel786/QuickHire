@@ -1,5 +1,6 @@
 import express from 'express';
 import { LearningPlan } from '../models/LearningPlan.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ router.get('/', async (req, res) => {
 });
 
 // Generate AI-based learning plan (LLM-backed)
-router.post('/generate', async (req, res) => {
+router.post('/generate', requireAuth, async (req, res) => {
   try {
     const { technology, totalDays, dailyHours, explanationType } = req.body || {};
 
@@ -169,10 +170,10 @@ router.get('/:planId', async (req, res) => {
 });
 
 // Create new learning plan
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const planData = req.body;
-    const userId = req.headers['user-id'] || req.user?.id;
+    const userId = req.user?.id || req.headers['user-id'];
 
     if (!userId) {
       return res.status(401).json({ error: 'User authentication required' });
