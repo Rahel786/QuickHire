@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Helmet } from "react-helmet";
+import { Helmet } from "react-helmet-async";
 import { Calendar, BookOpen, Bell, Search, ChevronRight, Briefcase } from "lucide-react";
 
 import { useAuth } from "../../contexts/AuthContext";
