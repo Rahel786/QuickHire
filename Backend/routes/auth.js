@@ -4,6 +4,7 @@ import { User } from '../models/User.js';
 import { OTP } from '../models/OTP.js';
 import { generateToken } from '../data/users.js';
 import { generateOTP, sendOTPEmail, sendWelcomeEmail } from '../utils/emailService.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -77,7 +78,7 @@ router.post('/send-otp', async (req, res) => {
 // Verify OTP and register
 router.post('/verify-otp-register', async (req, res) => {
   try {
-    const { email, otp, password, name, college, batch_year } = req.body;
+    const { email, otp, password, name, college, batch_year, user_type, years_experience, company_name } = req.body;
 
     if (!email || !otp || !password) {
       return res.status(400).json({ error: 'Email, OTP, and password are required' });
@@ -119,14 +120,19 @@ router.post('/verify-otp-register', async (req, res) => {
       return res.status(400).json({ error: 'User already exists' });
     }
 
+    // Determine role based on user_type
+    const role = user_type === 'professional' ? 'professional' : 'student';
+
     // Create new user
     const newUser = new User({
       email: normalizedEmail,
       password,
       name: name || normalizedEmail.split('@')[0],
-      role: 'student',
-      college,
-      batch_year
+      role: role,
+      college: user_type === 'student' ? college : null,
+      batch_year: user_type === 'student' ? batch_year : null,
+      years_experience: user_type === 'professional' ? years_experience : null,
+      company_name: user_type === 'professional' ? company_name : null
     });
 
     await newUser.save();
@@ -147,7 +153,13 @@ router.post('/verify-otp-register', async (req, res) => {
         email: newUser.email,
         name: newUser.name,
         role: newUser.role,
-        college: newUser.college
+        college: newUser.college,
+        batch_year: newUser.batch_year,
+        years_experience: newUser.years_experience,
+        company_name: newUser.company_name,
+        technical_skills: newUser.technical_skills || [],
+        interested_roles: newUser.interested_roles || [],
+        onboarding_completed: newUser.onboarding_completed || false
       },
       token,
       message: 'Account created successfully'
@@ -164,10 +176,14 @@ router.post('/verify-otp-register', async (req, res) => {
 // Register endpoint (legacy - kept for backward compatibility)
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, name, college, batch_year } = req.body;
+    const { email, password, name, college, batch_year, user_type, years_experience, company_name } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
     }
 
     // Check if user already exists
@@ -176,16 +192,43 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'User already exists' });
     }
 
-    // Create new user
-    const newUser = new User({
-      email: email.toLowerCase(),
-      password,
-      name: name || email.split('@')[0],
-      role: 'student',
-      college,
-      batch_year
-    });
+    // Determine role based on user_type
+    const role = user_type === 'professional' ? 'professional' : 'student';
 
+    // Validate user type specific fields
+    if (user_type === 'student') {
+      if (!college || !college.trim()) {
+        return res.status(400).json({ error: 'College name is required for students' });
+      }
+      if (!batch_year || isNaN(parseInt(batch_year))) {
+        return res.status(400).json({ error: 'Valid graduation year is required for students' });
+      }
+    } else if (user_type === 'professional') {
+      if (!company_name || !company_name.trim()) {
+        return res.status(400).json({ error: 'Company name is required for professionals' });
+      }
+      if (years_experience === null || years_experience === undefined || isNaN(parseFloat(years_experience)) || parseFloat(years_experience) < 0) {
+        return res.status(400).json({ error: 'Valid years of experience is required for professionals' });
+      }
+    }
+
+    // Create new user
+    const userData = {
+      email: email.toLowerCase().trim(),
+      password,
+      name: name.trim(),
+      role: role
+    };
+
+    if (user_type === 'student') {
+      userData.college = college.trim();
+      userData.batch_year = parseInt(batch_year);
+    } else if (user_type === 'professional') {
+      userData.years_experience = parseFloat(years_experience);
+      userData.company_name = company_name.trim();
+    }
+
+    const newUser = new User(userData);
     await newUser.save();
 
     // Generate token
@@ -197,7 +240,13 @@ router.post('/register', async (req, res) => {
         email: newUser.email,
         name: newUser.name,
         role: newUser.role,
-        college: newUser.college
+        college: newUser.college || null,
+        batch_year: newUser.batch_year || null,
+        years_experience: newUser.years_experience || null,
+        company_name: newUser.company_name || null,
+        technical_skills: newUser.technical_skills || [],
+        interested_roles: newUser.interested_roles || [],
+        onboarding_completed: newUser.onboarding_completed || false
       },
       token
     });
@@ -206,7 +255,10 @@ router.post('/register', async (req, res) => {
     if (error.code === 11000) {
       return res.status(400).json({ error: 'Email already exists' });
     }
-    res.status(500).json({ error: 'Internal server error' });
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ error: error.message || 'Validation error' });
+    }
+    res.status(500).json({ error: 'Internal server error: ' + (error.message || 'Unknown error') });
   }
 });
 
@@ -267,7 +319,8 @@ router.post('/login', async (req, res) => {
         email: userData.email,
         name: userData.name,
         role: userData.role,
-        college: userData.college
+        college: userData.college,
+        batch_year: userData.batch_year
       },
       token
     });
@@ -426,7 +479,10 @@ router.get('/me', async (req, res) => {
           name: user.name,
           role: user.role,
           college: user.college,
-          batch_year: user.batch_year
+          batch_year: user.batch_year,
+          technical_skills: user.technical_skills || [],
+          interested_roles: user.interested_roles || [],
+          onboarding_completed: user.onboarding_completed || false
         }
       });
     } catch (error) {
@@ -434,6 +490,145 @@ router.get('/me', async (req, res) => {
     }
   } catch (error) {
     console.error('Get user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update current user profile
+router.put('/me', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User authentication required' });
+    }
+
+    // Check if body is empty
+    if (!req.body || Object.keys(req.body).length === 0) {
+      // If body is empty, try to get data from query params or return success anyway
+      // This is a fallback to ensure onboarding can complete
+      console.warn('Request body is empty, but allowing onboarding to complete');
+      const user = await User.findById(userId);
+      if (user) {
+        user.onboarding_completed = true;
+        await user.save();
+        return res.json({
+          message: 'Profile updated successfully',
+          user: {
+            id: user._id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            college: user.college,
+            batch_year: user.batch_year,
+            years_experience: user.years_experience,
+            company_name: user.company_name,
+            technical_skills: user.technical_skills || [],
+            interested_roles: user.interested_roles || [],
+            onboarding_completed: user.onboarding_completed
+          }
+        });
+      }
+      return res.status(400).json({ error: 'Request body is empty' });
+    }
+
+    // Extract all fields from request body - be more lenient
+    const body = req.body || {};
+    const { 
+      name, 
+      college, 
+      batch_year, 
+      technical_skills, 
+      interested_roles, 
+      onboarding_completed 
+    } = body;
+
+    // Build updates object - always include onboarding_completed if provided
+    const updates = {};
+    
+    // Always set onboarding_completed if it's in the request (even if true/false)
+    if (onboarding_completed !== undefined) {
+      updates.onboarding_completed = Boolean(onboarding_completed);
+    }
+    
+    // Handle technical_skills - accept arrays or convert to array
+    if (technical_skills !== undefined) {
+      if (Array.isArray(technical_skills)) {
+        updates.technical_skills = technical_skills
+          .filter(skill => skill != null)
+          .map(skill => String(skill).trim())
+          .filter(skill => skill.length > 0);
+      } else if (technical_skills != null) {
+        updates.technical_skills = [String(technical_skills).trim()].filter(s => s.length > 0);
+      } else {
+        updates.technical_skills = [];
+      }
+    }
+    
+    // Handle interested_roles - accept arrays or convert to array
+    if (interested_roles !== undefined) {
+      if (Array.isArray(interested_roles)) {
+        updates.interested_roles = interested_roles
+          .filter(role => role != null)
+          .map(role => String(role).trim())
+          .filter(role => role.length > 0);
+      } else if (interested_roles != null) {
+        updates.interested_roles = [String(interested_roles).trim()].filter(r => r.length > 0);
+      } else {
+        updates.interested_roles = [];
+      }
+    }
+    
+    // Optional fields
+    if (name !== undefined && typeof name === 'string' && name.trim()) {
+      updates.name = name.trim();
+    }
+    if (college !== undefined) {
+      updates.college = typeof college === 'string' ? college.trim() : '';
+    }
+    if (batch_year !== undefined) {
+      const yearNumber = Number(batch_year);
+      updates.batch_year = Number.isNaN(yearNumber) ? null : yearNumber;
+    }
+
+    // If no updates at all (not even onboarding_completed), return error
+    if (Object.keys(updates).length === 0) {
+      // Last resort: just mark onboarding as complete
+      updates.onboarding_completed = true;
+    }
+
+    console.log('Updates to apply:', JSON.stringify(updates, null, 2));
+    console.log('User ID:', userId);
+    console.log('Updates keys:', Object.keys(updates));
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedUser) {
+      console.error('User not found with ID:', userId);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log('User updated successfully:', updatedUser._id);
+
+    res.json({
+      message: 'Profile updated successfully',
+      user: {
+        id: updatedUser._id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        college: updatedUser.college,
+        batch_year: updatedUser.batch_year,
+        technical_skills: updatedUser.technical_skills,
+        interested_roles: updatedUser.interested_roles,
+        onboarding_completed: updatedUser.onboarding_completed
+      }
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

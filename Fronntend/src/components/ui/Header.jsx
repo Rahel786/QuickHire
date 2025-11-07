@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import Icon from '../AppIcon';
 import Button from './Button';
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+  const profileMenuRef = useRef(null);
 
   const navigationItems = [
     { label: 'Dashboard', path: '/user-dashboard', icon: 'LayoutDashboard' },
@@ -28,9 +31,28 @@ const Header = () => {
     setIsMobileMenuOpen(false);
   };
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    await signOut();
+    setIsProfileMenuOpen(false);
+    setIsMobileMenuOpen(false);
+    navigate('/login');
+  };
+
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 bg-card border-b border-border z-100">
+      <header className="fixed top-0 left-0 right-0 bg-card border-b border-border z-50 shadow-sm">
         <div className="flex items-center justify-between h-16 px-6">
           {/* Logo */}
           <Link to="/user-dashboard" className="flex items-center space-x-2">
@@ -64,17 +86,41 @@ const Header = () => {
               <span className="sr-only">Notifications</span>
             </Button>
             {user ? (
-              <Button 
-                variant="ghost" 
-                iconName="LogOut" 
-                size="sm"
-                onClick={async () => {
-                  await signOut();
-                  window.location.href = '/login';
-                }}
-              >
-                <span className="sr-only">Sign Out</span>
-              </Button>
+              <div className="relative" ref={profileMenuRef}>
+                <button
+                  onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+                  className="flex items-center space-x-2 px-3 py-2 rounded-lg border border-border hover:bg-muted transition"
+                >
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm uppercase">
+                    {user?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-foreground">{user?.name || user?.email}</p>
+                    <p className="text-xs text-muted-foreground">Profile</p>
+                  </div>
+                  <Icon name={isProfileMenuOpen ? 'ChevronUp' : 'ChevronDown'} size={16} />
+                </button>
+
+                {isProfileMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-lg shadow-lg overflow-hidden z-[55]">
+                    <Link
+                      to="/profile"
+                      className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-muted transition"
+                      onClick={() => setIsProfileMenuOpen(false)}
+                    >
+                      <Icon name="User" size={16} className="mr-2" />
+                      View Profile
+                    </Link>
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition"
+                    >
+                      <Icon name="LogOut" size={16} className="mr-2" />
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <Link to="/login">
                 <Button variant="ghost" iconName="LogIn" size="sm">
@@ -99,13 +145,13 @@ const Header = () => {
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-200 md:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 z-[60] md:hidden"
           onClick={closeMobileMenu}
         />
       )}
       {/* Mobile Menu */}
       <div
-        className={`fixed top-0 right-0 h-full w-80 bg-card border-l border-border z-200 transform transition-transform duration-300 md:hidden ${
+        className={`fixed top-0 right-0 h-full w-80 bg-card border-l border-border z-[60] transform transition-transform duration-300 md:hidden ${
           isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -157,6 +203,10 @@ const Header = () => {
                 iconName="User"
                 iconPosition="left"
                 className="justify-start"
+                onClick={() => {
+                  closeMobileMenu();
+                  navigate('/profile');
+                }}
               >
                 Profile
               </Button>
@@ -185,11 +235,7 @@ const Header = () => {
                   iconName="LogOut"
                   iconPosition="left"
                   className="justify-start"
-                  onClick={async () => {
-                    await signOut();
-                    closeMobileMenu();
-                    window.location.href = '/login';
-                  }}
+                  onClick={handleSignOut}
                 >
                   Sign Out
                 </Button>

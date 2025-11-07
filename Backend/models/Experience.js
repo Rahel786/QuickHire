@@ -77,10 +77,23 @@ const experienceSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  experience_story: {
+    type: String,
+    trim: true
+  },
+  linkedin_profile: {
+    type: String,
+    trim: true,
+    default: null
+  },
   interview_rounds: [interviewRoundSchema],
   likes_count: {
     type: Number,
     default: 0
+  },
+  liked_by: {
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    default: []
   },
   helpful_count: {
     type: Number,

@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
-import { Plus, Minus, Save, AlertCircle } from 'lucide-react';
+import { Save, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { experiencesAPI } from '../../../utils/api';
+
+const difficulties = [
+  { value: 'easy', label: 'Easy' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'hard', label: 'Hard' },
+  { value: 'very_hard', label: 'Very Hard' }
+];
 
 const ShareExperienceForm = ({ onExperienceShared }) => {
   const { user } = useAuth();
@@ -14,63 +21,13 @@ const ShareExperienceForm = ({ onExperienceShared }) => {
     overall_difficulty: 'medium',
     preparation_tips: '',
     resources: '',
+    experience_story: '',
+    linkedin_profile: ''
   });
-  const [rounds, setRounds] = useState([
-    {
-      round_type: 'mcq',
-      round_number: 1,
-      questions_pattern: '',
-      detailed_questions: '',
-      duration_minutes: 60,
-      difficulty: 'medium',
-      tips: ''
-    }
-  ]);
-
-  const roundTypes = [
-    { value: 'mcq', label: 'MCQ Round' },
-    { value: 'coding', label: 'Coding Round' },
-    { value: 'technical', label: 'Technical Interview' },
-    { value: 'hr', label: 'HR Interview' },
-    { value: 'group_discussion', label: 'Group Discussion' },
-    { value: 'case_study', label: 'Case Study' }
-  ];
-
-  const difficulties = [
-    { value: 'easy', label: 'Easy' },
-    { value: 'medium', label: 'Medium' },
-    { value: 'hard', label: 'Hard' },
-    { value: 'very_hard', label: 'Very Hard' }
-  ];
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setError('');
-  };
-
-  const handleRoundChange = (index, field, value) => {
-    setRounds(prev => prev?.map((round, i) => 
-      i === index ? { ...round, [field]: value } : round
-    ));
-  };
-
-  const addRound = () => {
-    setRounds(prev => [...prev, {
-      round_type: 'mcq',
-      round_number: prev?.length + 1,
-      questions_pattern: '',
-      detailed_questions: '',
-      duration_minutes: 60,
-      difficulty: 'medium',
-      tips: ''
-    }]);
-  };
-
-  const removeRound = (index) => {
-    setRounds(prev => prev?.filter((_, i) => i !== index)?.map((round, i) => ({
-      ...round,
-      round_number: i + 1
-    })));
   };
 
   const validateForm = () => {
@@ -86,8 +43,8 @@ const ShareExperienceForm = ({ onExperienceShared }) => {
       setError('Preparation tips are required');
       return false;
     }
-    if (rounds?.some(round => !round?.questions_pattern?.trim())) {
-      setError('All rounds must have questions pattern filled');
+    if (!formData?.experience_story?.trim()) {
+      setError('Please share your detailed experience.');
       return false;
     }
     return true;
@@ -109,15 +66,8 @@ const ShareExperienceForm = ({ onExperienceShared }) => {
         overall_difficulty: formData?.overall_difficulty,
         preparation_tips: formData?.preparation_tips?.trim(),
         resources: formData?.resources?.trim() || null,
-        interview_rounds: rounds?.map(round => ({
-          round_type: round?.round_type,
-          round_number: round?.round_number,
-          questions_pattern: round?.questions_pattern?.trim(),
-          detailed_questions: round?.detailed_questions?.trim() || null,
-          duration_minutes: round?.duration_minutes || null,
-          difficulty: round?.difficulty,
-          tips: round?.tips?.trim() || null
-        }))
+        experience_story: formData?.experience_story?.trim(),
+        linkedin_profile: formData?.linkedin_profile?.trim() || null
       };
 
       // Save to backend API
@@ -132,6 +82,7 @@ const ShareExperienceForm = ({ onExperienceShared }) => {
           user_id: user?.id,
           ...experienceData,
           likes_count: 0,
+          liked_by: [],
           created_at: new Date().toISOString()
         };
         const storedExperiences = localStorage.getItem('company_experiences');
@@ -148,16 +99,9 @@ const ShareExperienceForm = ({ onExperienceShared }) => {
         overall_difficulty: 'medium',
         preparation_tips: '',
         resources: '',
+        experience_story: '',
+        linkedin_profile: ''
       });
-      setRounds([{
-        round_type: 'mcq',
-        round_number: 1,
-        questions_pattern: '',
-        detailed_questions: '',
-        duration_minutes: 60,
-        difficulty: 'medium',
-        tips: ''
-      }]);
 
       onExperienceShared?.();
     } catch (error) {
@@ -273,127 +217,37 @@ const ShareExperienceForm = ({ onExperienceShared }) => {
             />
           </div>
 
-          {/* Interview Rounds */}
+          {/* Detailed Experience */}
           <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-medium text-gray-900">Interview Rounds</h3>
-              <button
-                type="button"
-                onClick={addRound}
-                className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add Round
-              </button>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Detailed Experience *
+            </label>
+            <textarea
+              value={formData.experience_story}
+              onChange={(e) => handleInputChange('experience_story', e?.target?.value)}
+              rows={10}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Share the complete story of your interview journey, from preparation to final results..."
+              required
+            />
+            <p className="mt-2 text-xs text-gray-500">Tip: Cover your preparation strategy, each round's highlights, and key takeaways.</p>
+          </div>
 
-            <div className="space-y-6">
-              {rounds?.map((round, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <h4 className="font-medium text-gray-900">Round {round?.round_number}</h4>
-                    {rounds?.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeRound(index)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <Minus className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Round Type
-                      </label>
-                      <select
-                        value={round?.round_type}
-                        onChange={(e) => handleRoundChange(index, 'round_type', e?.target?.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        {roundTypes?.map(type => (
-                          <option key={type?.value} value={type?.value}>
-                            {type?.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Duration (minutes)
-                      </label>
-                      <input
-                        type="number"
-                        value={round?.duration_minutes}
-                        onChange={(e) => handleRoundChange(index, 'duration_minutes', parseInt(e?.target?.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="60"
-                        min="15"
-                        max="180"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Difficulty
-                      </label>
-                      <select
-                        value={round?.difficulty}
-                        onChange={(e) => handleRoundChange(index, 'difficulty', e?.target?.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        {difficulties?.map(difficulty => (
-                          <option key={difficulty?.value} value={difficulty?.value}>
-                            {difficulty?.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Questions Pattern *
-                    </label>
-                    <textarea
-                      value={round?.questions_pattern}
-                      onChange={(e) => handleRoundChange(index, 'questions_pattern', e?.target?.value)}
-                      rows={2}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Describe the type of questions asked in this round..."
-                      required
-                    />
-                  </div>
-
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Detailed Questions (Optional)
-                    </label>
-                    <textarea
-                      value={round?.detailed_questions}
-                      onChange={(e) => handleRoundChange(index, 'detailed_questions', e?.target?.value)}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Specific questions you can remember..."
-                    />
-                  </div>
-
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Tips for this Round (Optional)
-                    </label>
-                    <textarea
-                      value={round?.tips}
-                      onChange={(e) => handleRoundChange(index, 'tips', e?.target?.value)}
-                      rows={2}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Any specific tips for this round..."
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+          {/* LinkedIn Profile (Optional) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              LinkedIn Profile (Optional)
+            </label>
+            <input
+              type="url"
+              value={formData?.linkedin_profile}
+              onChange={(e) => handleInputChange('linkedin_profile', e?.target?.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="https://www.linkedin.com/in/your-profile"
+            />
+            <p className="mt-2 text-xs text-gray-500">
+              Share your LinkedIn profile so others can connect with you for questions or networking.
+            </p>
           </div>
 
           {/* Submit Button */}

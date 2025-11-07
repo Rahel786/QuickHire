@@ -1,15 +1,21 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Mail, Lock, LogIn, AlertCircle, Eye, EyeOff, UserPlus, ArrowLeft, User } from 'lucide-react';
+import { Mail, Lock, LogIn, AlertCircle, Eye, EyeOff, UserPlus, ArrowLeft, User, Building2, GraduationCap, Briefcase, Calendar } from 'lucide-react';
 import Header from '../components/ui/Header';
 import { authAPI } from '../utils/api';
+import SuccessNotification from '../components/SuccessNotification';
 
 const Login = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [userType, setUserType] = useState('student'); // 'student' or 'professional'
+  const [college, setCollege] = useState('');
+  const [batchYear, setBatchYear] = useState('');
+  const [yearsExperience, setYearsExperience] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,10 +23,43 @@ const Login = () => {
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
+  const [devOTP, setDevOTP] = useState('');
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const { signIn } = useAuth();
   const navigate = useNavigate();
 
   const handleSendOTP = async () => {
+    if (!email?.trim()) {
+      setError('Email is required.');
+      return;
+    }
+    if (!name?.trim()) {
+      setError('Please enter your full name.');
+      return;
+    }
+
+    // Validate based on user type
+    if (userType === 'student') {
+      if (!college?.trim()) {
+        setError('Please enter your college name.');
+        return;
+      }
+      if (!batchYear || Number.isNaN(parseInt(batchYear, 10))) {
+        setError('Please enter a valid graduation year.');
+        return;
+      }
+    } else if (userType === 'professional') {
+      if (!companyName?.trim()) {
+        setError('Please enter your company name.');
+        return;
+      }
+      if (!yearsExperience || Number.isNaN(parseFloat(yearsExperience)) || parseFloat(yearsExperience) < 0) {
+        setError('Please enter a valid number of years of experience.');
+        return;
+      }
+    }
+
     setError('');
     setOtpLoading(true);
 
@@ -31,6 +70,11 @@ const Login = () => {
       } else {
         setOtpSent(true);
         setShowOTP(true);
+        // Store OTP for dev mode display
+        if (response.otp) {
+          setDevOTP(response.otp);
+          console.log('OTP for development:', response.otp);
+        }
       }
     } catch (err) {
       setError('Failed to send OTP. Please try again.');
@@ -44,17 +88,32 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const result = await authAPI.verifyOTPRegister(email, otp, password, name);
+      const gradYear = userType === 'student' ? (batchYear ? parseInt(batchYear, 10) : null) : null;
+      const expYears = userType === 'professional' ? (yearsExperience ? parseFloat(yearsExperience) : null) : null;
+      
+      const result = await authAPI.verifyOTPRegister(
+        email, 
+        otp, 
+        password, 
+        name, 
+        userType === 'student' ? college : null, 
+        gradYear,
+        userType,
+        expYears,
+        userType === 'professional' ? companyName : null
+      );
       
       if (result.error) {
         setError(result.error);
       } else {
-        // Store token and user
-        localStorage.setItem('token', result.token);
-        localStorage.setItem('user', JSON.stringify(result.user));
-        // Redirect to dashboard
-        navigate('/user-dashboard');
-        window.location.reload(); // Refresh to update auth context
+        // Token and user are already stored by authAPI.verifyOTPRegister
+        // Trigger a custom event to update auth context
+        window.dispatchEvent(new Event('localStorageUpdated'));
+        // Show success notification then redirect
+        const userName = result.user?.name || result.name || 'User';
+        setSuccessMessage(`Welcome ${userName}! Account created successfully.`);
+        setShowSuccess(true);
+        setLoading(false);
       }
     } catch (err) {
       setError('Invalid OTP. Please try again.');
@@ -79,10 +138,14 @@ const Login = () => {
         
         if (result.error) {
           setError(result.error);
+          setLoading(false);
         } else {
-          navigate('/user-dashboard');
+          // User is already stored by authAPI.login
+          const userName = result.data?.user?.name || result.user?.name || 'User';
+          setSuccessMessage(`Welcome back ${userName}! Logged in successfully.`);
+          setShowSuccess(true);
+          setLoading(false);
         }
-        setLoading(false);
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
@@ -90,9 +153,26 @@ const Login = () => {
     }
   };
 
+  const handleSuccessComplete = () => {
+    // Check if user needs onboarding, otherwise go to dashboard
+    const userData = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!userData.onboarding_completed) {
+      navigate('/onboarding', { replace: true });
+    } else {
+      navigate('/user-dashboard', { replace: true });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
+      {showSuccess && (
+        <SuccessNotification
+          message={successMessage}
+          onComplete={handleSuccessComplete}
+          duration={2000}
+        />
+      )}
       
       <main className="flex items-center justify-center px-4 py-12 pt-24">
         <div className="w-full max-w-md">
@@ -118,7 +198,14 @@ const Login = () => {
                   setIsSignUp(false);
                   setShowOTP(false);
                   setOtpSent(false);
+                  setOtp('');
+                  setDevOTP('');
                   setError('');
+                  setUserType('student');
+                  setCollege('');
+                  setBatchYear('');
+                  setYearsExperience('');
+                  setCompanyName('');
                 }}
                 className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                   !isSignUp
@@ -134,7 +221,14 @@ const Login = () => {
                   setIsSignUp(true);
                   setShowOTP(false);
                   setOtpSent(false);
+                  setOtp('');
+                  setDevOTP('');
                   setError('');
+                  setUserType('student');
+                  setCollege('');
+                  setBatchYear('');
+                  setYearsExperience('');
+                  setCompanyName('');
                 }}
                 className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                   isSignUp
@@ -176,6 +270,136 @@ const Login = () => {
                       />
                     </div>
                   </div>
+                )}
+
+                {/* User Type Selection - Only for Sign Up */}
+                {isSignUp && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      I am a
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserType('student');
+                          setYearsExperience('');
+                          setCompanyName('');
+                        }}
+                        className={`p-4 border-2 rounded-lg transition-all ${
+                          userType === 'student'
+                            ? 'border-blue-600 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        <GraduationCap className="w-6 h-6 mx-auto mb-2" />
+                        <span className="font-medium text-sm">Student / Non-working</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserType('professional');
+                          setCollege('');
+                          setBatchYear('');
+                        }}
+                        className={`p-4 border-2 rounded-lg transition-all ${
+                          userType === 'professional'
+                            ? 'border-blue-600 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        <Briefcase className="w-6 h-6 mx-auto mb-2" />
+                        <span className="font-medium text-sm">Working Professional</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Conditional Fields for Student - Only for Sign Up */}
+                {isSignUp && userType === 'student' && (
+                  <>
+                    <div>
+                      <label htmlFor="college" className="block text-sm font-medium text-gray-700 mb-2">
+                        College Name
+                      </label>
+                      <div className="relative">
+                        <Building2 className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                        <input
+                          id="college"
+                          type="text"
+                          required={isSignUp}
+                          value={college}
+                          onChange={(e) => setCollege(e.target.value)}
+                          placeholder="e.g., IIT Delhi"
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="batchYear" className="block text-sm font-medium text-gray-700 mb-2">
+                        Graduation Year
+                      </label>
+                      <div className="relative">
+                        <GraduationCap className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                        <input
+                          id="batchYear"
+                          type="number"
+                          required={isSignUp}
+                          value={batchYear}
+                          onChange={(e) => setBatchYear(e.target.value)}
+                          placeholder="2025"
+                          min="2000"
+                          max="2100"
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Conditional Fields for Professional - Only for Sign Up */}
+                {isSignUp && userType === 'professional' && (
+                  <>
+                    <div>
+                      <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 mb-2">
+                        Company Name
+                      </label>
+                      <div className="relative">
+                        <Building2 className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                        <input
+                          id="companyName"
+                          type="text"
+                          required={isSignUp}
+                          value={companyName}
+                          onChange={(e) => setCompanyName(e.target.value)}
+                          placeholder="e.g., Google, Microsoft"
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="yearsExperience" className="block text-sm font-medium text-gray-700 mb-2">
+                        Years of Experience
+                      </label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                        <input
+                          id="yearsExperience"
+                          type="number"
+                          required={isSignUp}
+                          value={yearsExperience}
+                          onChange={(e) => setYearsExperience(e.target.value)}
+                          placeholder="e.g., 2.5"
+                          min="0"
+                          max="50"
+                          step="0.5"
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 {/* Email Field */}
@@ -251,8 +475,11 @@ const Login = () => {
                   <p className="text-sm text-gray-600 mb-4">
                     We've sent a 6-digit OTP to <strong>{email}</strong>
                   </p>
-                  {otpSent && process.env.NODE_ENV === 'development' && (
-                    <p className="text-xs text-blue-600 mb-2">Check console for OTP in dev mode</p>
+                  {otpSent && devOTP && (
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-xs font-semibold text-blue-900 mb-1">Development Mode - OTP:</p>
+                      <p className="text-lg font-mono font-bold text-blue-700">{devOTP}</p>
+                    </div>
                   )}
                 </div>
 
@@ -278,6 +505,7 @@ const Login = () => {
                       setShowOTP(false);
                       setOtpSent(false);
                       setOtp('');
+                      setDevOTP('');
                     }}
                     className="flex-1 py-3 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2"
                   >

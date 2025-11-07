@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
+import { useNavigate } from "react-router-dom";
 import { Calendar, BookOpen, Bell, Search, ChevronRight, Briefcase } from "lucide-react";
 
 import { useAuth } from "../../contexts/AuthContext";
@@ -8,7 +9,6 @@ import Header from "../../components/ui/Header";
 import WelcomeSection from "./components/WelcomeSection";
 import QuickSearchBar from "./components/QuickSearchBar";
 import JobMatchCard from "./components/JobMatchCard";
-import ActionCard from "./components/ActionCard";
 import LearningProgressCard from "./components/LearningProgressCard";
 import EventCard from "./components/EventCard";
 import ActivityFeedItem from "./components/ActivityFeedItem";
@@ -17,8 +17,10 @@ export default function UserDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("");
+  const [activityReadStatus, setActivityReadStatus] = useState({});
   
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   // Mock job applications data
   const jobApplications = [
@@ -149,48 +151,6 @@ export default function UserDashboard() {
     }
   ];
 
-  // Mock action cards
-  const actionCards = [
-    {
-      id: 1,
-      title: "Campus Placement Experiences",
-      description: "Read real experiences from students about company drives at their campus",
-      icon: "BookOpen",
-      type: "experiences",
-      route: "/senior-experience-sharing",
-      subtitle: "Filter by company, college & rating",
-      badge: "New"
-    },
-    {
-      id: 2,
-      title: "Interview Prep Roadmap",
-      description: "Get personalized learning roadmap with interview Q&A based on your timeline",
-      icon: "Target",
-      type: "learning-roadmap",
-      route: "/interview-tech-prep-planner",
-      subtitle: "Tech stack selection & daily plans",
-      badge: "New"
-    },
-    {
-      id: 3,
-      title: "Find Your Dream Job",
-      description: "Browse thousands of job opportunities from top companies worldwide",
-      icon: "Briefcase",
-      type: "job-search",
-      route: "/job-search-results",
-      subtitle: "500+ new jobs today"
-    },
-    {
-      id: 4,
-      title: "Attend Career Events",
-      description: "Join webinars, workshops, and networking events",
-      icon: "Calendar",
-      type: "events",
-      route: "/career-events-calendar",
-      subtitle: "15+ events this month"
-    }
-  ];
-
   // Mock recent activity
   const recentActivity = [
     {
@@ -252,8 +212,28 @@ export default function UserDashboard() {
   const handleSearch = (query, location) => {
     setSearchQuery(query);
     setSelectedLocation(location);
-    // Search functionality (mock implementation)
-    console.log("Searching for:", { query, location });
+    // Navigate to job search with query
+    navigate('/job-search-results');
+  };
+
+  const handleViewAllJobs = () => {
+    navigate('/job-search-results');
+  };
+
+  const handleViewAllCourses = () => {
+    navigate('/learning-resources');
+  };
+
+  const handleViewAllEvents = () => {
+    navigate('/career-events-calendar');
+  };
+
+  const handleMarkAllRead = () => {
+    const allRead = {};
+    recentActivity.forEach(activity => {
+      allRead[activity.id] = true;
+    });
+    setActivityReadStatus(allRead);
   };
 
   return (
@@ -269,7 +249,7 @@ export default function UserDashboard() {
       <div className="min-h-screen bg-gray-50">
         <Header />
         
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24">
           {/* Welcome Section with User Info */}
           <WelcomeSection user={user} />
 
@@ -286,7 +266,10 @@ export default function UserDashboard() {
               <section>
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-bold text-gray-900">Perfect Job Matches</h2>
-                  <button className="text-blue-600 hover:text-blue-700 font-medium flex items-center">
+                  <button 
+                    onClick={handleViewAllJobs}
+                    className="text-blue-600 hover:text-blue-700 font-medium flex items-center"
+                  >
                     View All <ChevronRight className="w-4 h-4 ml-1" />
                   </button>
                 </div>
@@ -298,28 +281,14 @@ export default function UserDashboard() {
                 </div>
               </section>
 
-              {/* Quick Actions */}
-              <section>
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Quick Actions</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {actionCards?.map((action) => (
-                    <ActionCard 
-                      key={action?.id} 
-                      title={action?.title}
-                      description={action?.description}
-                      icon={action?.icon}
-                      color={action?.color}
-                      href={action?.href}
-                    />
-                  ))}
-                </div>
-              </section>
-
               {/* Learning Progress */}
               <section>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xl font-bold text-gray-900">Learning Progress</h2>
-                  <button className="text-blue-600 hover:text-blue-700 font-medium text-sm">
+                  <button 
+                    onClick={handleViewAllCourses}
+                    className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+                  >
                     View All Courses
                   </button>
                 </div>
@@ -351,7 +320,10 @@ export default function UserDashboard() {
                     <Calendar className="w-5 h-5 mr-2 text-blue-600" />
                     Upcoming Events
                   </h3>
-                  <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                  <button 
+                    onClick={handleViewAllEvents}
+                    className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  >
                     View All
                   </button>
                 </div>
@@ -376,7 +348,10 @@ export default function UserDashboard() {
                     <Bell className="w-5 h-5 mr-2 text-green-600" />
                     Recent Activity
                   </h3>
-                  <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                  <button 
+                    onClick={handleMarkAllRead}
+                    className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  >
                     Mark All Read
                   </button>
                 </div>
@@ -389,7 +364,8 @@ export default function UserDashboard() {
                       title={activity?.title}
                       description={activity?.description}
                       time={activity?.time}
-                      isRead={activity?.isRead}
+                      isRead={activityReadStatus[activity?.id] || activity?.isRead}
+                      activity={activity}
                     />
                   ))}
                 </div>

@@ -5,14 +5,14 @@ import { requireAuth } from '../middleware/auth.js';
 const router = express.Router();
 
 // Get all learning plans for a user
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
-    const userId = req.headers['user-id'] || req.query.user_id;
-    
-    const query = {};
-    if (userId) {
-      query.user_id = userId;
+    const userId = req.user?.id || req.headers['user-id'] || req.query.user_id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User authentication required' });
     }
+
+    const query = { user_id: userId };
 
     const plans = await LearningPlan.find(query)
       .populate('user_id', 'name email')
@@ -135,6 +135,9 @@ Return exactly ${days} entries with day_number starting at 1 and increasing by 1
           impressTip: ''
         })),
         learning_context: typeof p?.learning_context === 'string' ? p.learning_context : '',
+
+
+        
         estimated_hours: hours,
         is_completed: false
       };
@@ -200,12 +203,14 @@ router.post('/', requireAuth, async (req, res) => {
   }
 });
 
-// Update learning plan
-router.put('/:planId', async (req, res) => {
+// Update learning plan (owner only)
+router.put('/:planId', requireAuth, async (req, res) => {
   try {
     const { planId } = req.params;
-    const plan = await LearningPlan.findByIdAndUpdate(
-      planId,
+    const userId = req.user?.id;
+
+    const plan = await LearningPlan.findOneAndUpdate(
+      { _id: planId, user_id: userId },
       req.body,
       { new: true, runValidators: true }
     ).populate('user_id', 'name email');
@@ -224,11 +229,12 @@ router.put('/:planId', async (req, res) => {
   }
 });
 
-// Delete learning plan
-router.delete('/:planId', async (req, res) => {
+// Delete learning plan (owner only)
+router.delete('/:planId', requireAuth, async (req, res) => {
   try {
     const { planId } = req.params;
-    const plan = await LearningPlan.findByIdAndDelete(planId);
+    const userId = req.user?.id;
+    const plan = await LearningPlan.findOneAndDelete({ _id: planId, user_id: userId });
 
     if (!plan) {
       return res.status(404).json({ error: 'Learning plan not found' });

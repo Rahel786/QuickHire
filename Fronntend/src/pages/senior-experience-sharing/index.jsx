@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, Search, Filter, Plus, BookOpen, Users, Award, Building2, GraduationCap, Star } from 'lucide-react';
+import { User, Search, Filter, Plus, BookOpen, Users, Award, Building2, GraduationCap, Star, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { experiencesAPI } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import Header from '../../components/ui/Header';
@@ -11,8 +11,10 @@ const SeniorExperienceSharing = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('browse');
   const [experiences, setExperiences] = useState([]);
+  const [myExperiences, setMyExperiences] = useState([]);
   const [filteredExperiences, setFilteredExperiences] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMy, setLoadingMy] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [collegeSearchQuery, setCollegeSearchQuery] = useState('');
   const [availableColleges, setAvailableColleges] = useState([]);
@@ -37,6 +39,9 @@ const SeniorExperienceSharing = () => {
     rating: ''
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [companySearchQuery, setCompanySearchQuery] = useState('');
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
 
   // Fetch colleges from API
   const fetchColleges = useCallback(async (searchTerm = '') => {
@@ -84,6 +89,14 @@ const SeniorExperienceSharing = () => {
   }, []);
 
   useEffect(() => {
+    if (user) {
+      loadMyExperiences();
+    } else {
+      setMyExperiences([]);
+    }
+  }, [user]);
+
+  useEffect(() => {
     applyFilters();
   }, [experiences, searchQuery, filters, collegeSearchQuery]);
   
@@ -110,15 +123,30 @@ const SeniorExperienceSharing = () => {
         const data = await experiencesAPI.getAllExperiences();
         
         if (data && data.experiences) {
+          // Normalize API experiences to include id and created_at
+          const normalizedApi = data.experiences.map(exp => ({
+            ...exp,
+            id: exp._id || exp.id,
+            created_at: exp.createdAt || exp.created_at,
+            linkedin_profile: exp.linkedin_profile || exp.linkedIn_profile || null,
+          }));
+
           // Merge API data with localStorage data
           const storedExperiences = localStorage.getItem('company_experiences');
           const localExperiences = storedExperiences ? JSON.parse(storedExperiences) : [];
           
-          // Combine API experiences with local ones, removing duplicates
-          const allExperiences = [...data.experiences, ...localExperiences];
-          const uniqueExperiences = allExperiences.filter((exp, index, self) => 
-            index === self.findIndex(e => e.id === exp.id)
-          );
+          // Combine API experiences with local ones, removing duplicates by id/_id
+          const normalizedLocal = localExperiences.map(exp => ({
+            ...exp,
+            liked_by: exp.liked_by || [],
+            id: exp.id || exp._id,
+            linkedin_profile: exp.linkedin_profile || exp.linkedIn_profile || null,
+          }));
+          const allExperiences = [...normalizedApi, ...normalizedLocal];
+          const uniqueExperiences = allExperiences.filter((exp, index, self) => {
+            const key = exp._id || exp.id;
+            return index === self.findIndex(e => (e._id || e.id) === key);
+          });
           
           setExperiences(uniqueExperiences);
           
@@ -140,7 +168,12 @@ const SeniorExperienceSharing = () => {
       // Load from localStorage as fallback
       const storedExperiences = localStorage.getItem('company_experiences');
       if (storedExperiences) {
-        const localExperiences = JSON.parse(storedExperiences);
+        const localExperiences = JSON.parse(storedExperiences).map(exp => ({
+          ...exp,
+          liked_by: exp.liked_by || [],
+          id: exp.id || exp._id,
+          linkedin_profile: exp.linkedin_profile || exp.linkedIn_profile || null,
+        }));
         setExperiences(localExperiences);
         
         // Extract unique colleges from local experiences
@@ -163,6 +196,51 @@ const SeniorExperienceSharing = () => {
     }
   };
 
+  const loadMyExperiences = async () => {
+    try {
+      if (!user) {
+        setMyExperiences([]);
+        return;
+      }
+      // Try backend API
+      setLoadingMy(true);
+      try {
+        const data = await experiencesAPI.getMyExperiences();
+        if (data && data.experiences) {
+          const normalized = data.experiences.map(exp => ({
+            ...exp,
+            id: exp._id || exp.id,
+            liked_by: exp.liked_by || [],
+            created_at: exp.createdAt || exp.created_at,
+            linkedin_profile: exp.linkedin_profile || exp.linkedIn_profile || null,
+          }));
+          setMyExperiences(normalized);
+          return;
+        }
+      } catch (apiError) {
+        console.log('My experiences API failed, using localStorage:', apiError);
+      }
+      // Fallback to localStorage
+      const stored = localStorage.getItem('company_experiences');
+      if (stored) {
+        const local = JSON.parse(stored).map(exp => ({
+          ...exp,
+          liked_by: exp.liked_by || [],
+          id: exp.id || exp._id,
+          linkedin_profile: exp.linkedin_profile || exp.linkedIn_profile || null,
+        }));
+        setMyExperiences(local.filter(exp => exp.user_id === user?.id));
+      } else {
+        setMyExperiences([]);
+      }
+    } catch (e) {
+      console.error('Error loading my experiences:', e);
+      setMyExperiences([]);
+    } finally {
+      setLoadingMy(false);
+    }
+  };
+
   const applyFilters = () => {
     let filtered = [...experiences];
 
@@ -177,9 +255,11 @@ const SeniorExperienceSharing = () => {
       );
     }
 
-    // Company filter
+    // Company filter - case insensitive
     if (filters?.company) {
-      filtered = filtered?.filter(exp => exp?.company_name === filters?.company);
+      filtered = filtered?.filter(exp => 
+        exp?.company_name?.toLowerCase() === filters?.company?.toLowerCase()
+      );
     }
 
     // Round type filter
@@ -220,21 +300,73 @@ const SeniorExperienceSharing = () => {
     setFilteredExperiences(filtered);
   };
 
-  const handleLikeExperience = async (experienceId) => {
-    // Allow likes for all users during testing
+  const handleDeleteExperience = async (experienceId) => {
+    if (!user) return;
     try {
-      const experience = experiences?.find(exp => exp?.id === experienceId);
-      const newLikesCount = (experience?.likes_count || 0) + 1;
-
-      const updatedExperiences = experiences?.map(exp => 
-        exp?.id === experienceId 
-          ? { ...exp, likes_count: newLikesCount }
-          : exp
-      );
+      await experiencesAPI.deleteExperience(experienceId);
       
-      setExperiences(updatedExperiences);
-      localStorage.setItem('company_experiences', JSON.stringify(updatedExperiences));
+      // Remove from experiences list
+      setExperiences(prev => prev.filter(exp => (exp._id || exp.id) !== experienceId));
+      
+      // Remove from my experiences list
+      setMyExperiences(prev => prev.filter(exp => (exp._id || exp.id) !== experienceId));
+      
+      // Also remove from localStorage if exists
+      const stored = localStorage.getItem('company_experiences');
+      if (stored) {
+        const local = JSON.parse(stored).filter(exp => (exp.id || exp._id) !== experienceId);
+        localStorage.setItem('company_experiences', JSON.stringify(local));
+      }
+      
+      // Update filtered experiences
+      setFilteredExperiences(prev => prev.filter(exp => (exp._id || exp.id) !== experienceId));
     } catch (error) {
+      console.error('Error deleting experience:', error);
+      alert('Failed to delete experience. Please try again.');
+    }
+  };
+
+  const handleLikeExperience = async (experienceId, onSuccess) => {
+    if (!user) return;
+    try {
+      const response = await experiencesAPI.likeExperience(experienceId);
+      const updated = response?.experience;
+      if (updated) {
+        const merge = (list) => list?.map(exp => {
+          const key = exp._id || exp.id;
+          if (key === (updated._id || updated.id || experienceId)) {
+            return {
+              ...exp,
+              ...updated,
+              id: updated._id || updated.id
+            };
+          }
+          return exp;
+        });
+        setExperiences(prev => merge(prev));
+        setMyExperiences(prev => merge(prev));
+        // update localStorage fallback if present
+        const stored = localStorage.getItem('company_experiences');
+        if (stored) {
+          const local = JSON.parse(stored).map(exp => {
+            const key = exp._id || exp.id;
+            if (key === (updated._id || updated.id || experienceId)) {
+              return {
+                ...exp,
+                ...updated,
+                id: updated._id || updated.id
+              };
+            }
+            return exp;
+          });
+          localStorage.setItem('company_experiences', JSON.stringify(local));
+        }
+        onSuccess?.();
+      }
+    } catch (error) {
+      if (error.response?.status === 200) {
+        onSuccess?.();
+      }
       console.error('Error liking experience:', error);
     }
   };
@@ -277,6 +409,15 @@ const SeniorExperienceSharing = () => {
                   Browse Experiences
                 </button>
                 <button
+                  onClick={() => setActiveTab('mine')}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    activeTab === 'mine' ?'bg-white text-blue-600 shadow-sm' :'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <User className="h-4 w-4 inline mr-2" />
+                  My Experiences
+                </button>
+                <button
                   onClick={() => setActiveTab('share')}
                   className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                     activeTab === 'share' ?'bg-white text-blue-600 shadow-sm' :'text-gray-500 hover:text-gray-700'
@@ -299,24 +440,65 @@ const SeniorExperienceSharing = () => {
                 <h2 className="text-2xl font-bold mb-4">Campus Placement Experiences</h2>
                 <p className="text-gray-600 mb-6">Real experiences from students about company drives at their campus</p>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  {/* Company Search/Select - Similar to College */}
                   <div className="relative">
-                    <Filter className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-                    <select 
-                      className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      value={filters.company}
-                      onChange={(e) => setFilters({...filters, company: e.target.value})}
-                    >
-                      <option value="">All Companies</option>
-                      <option value="Google">Google</option>
-                      <option value="Microsoft">Microsoft</option>
-                      <option value="Amazon">Amazon</option>
-                      <option value="Adobe">Adobe</option>
-                      <option value="Meta">Meta</option>
-                      {getUniqueCompanies().filter(c => !['Google', 'Microsoft', 'Amazon', 'Adobe', 'Meta'].includes(c)).map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                    <Building2 className="absolute left-3 top-3 w-4 h-4 text-gray-400 z-10" />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Search or select company..."
+                        value={companySearchQuery || filters.company}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setCompanySearchQuery(value);
+                          setFilters({...filters, company: value});
+                          setShowCompanyDropdown(true);
+                        }}
+                        onFocus={() => setShowCompanyDropdown(true)}
+                        className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      
+                      {/* Company Dropdown */}
+                      {showCompanyDropdown && (
+                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+                          <div className="p-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCompanySearchQuery('');
+                                setFilters({...filters, company: ''});
+                                setShowCompanyDropdown(false);
+                              }}
+                              className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded text-sm text-gray-700 flex items-center font-medium"
+                            >
+                              <Building2 className="w-3 h-3 mr-2 text-gray-400" />
+                              All Companies
+                            </button>
+                            {getUniqueCompanies()
+                              .filter(company => 
+                                !companySearchQuery || 
+                                company.toLowerCase().includes(companySearchQuery.toLowerCase())
+                              )
+                              .map((company, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => {
+                                    setCompanySearchQuery(company);
+                                    setFilters({...filters, company: company});
+                                    setShowCompanyDropdown(false);
+                                  }}
+                                  className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded text-sm text-gray-700 flex items-center"
+                                >
+                                  <Building2 className="w-3 h-3 mr-2 text-gray-400" />
+                                  {company}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="relative">
@@ -422,22 +604,16 @@ const SeniorExperienceSharing = () => {
                     )}
                   </div>
                   
-                  <div className="relative">
-                    <Star className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-                    <select 
-                      className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      value={filters.rating}
-                      onChange={(e) => setFilters({...filters, rating: e.target.value})}
-                    >
-                      <option value="">All Ratings</option>
-                      <option value="5">5 Stars</option>
-                      <option value="4">4+ Stars</option>
-                      <option value="3">3+ Stars</option>
-                    </select>
-                  </div>
+                  {/* Close company dropdown when clicking outside */}
+                  {showCompanyDropdown && (
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowCompanyDropdown(false)}
+                    />
+                  )}
                 </div>
 
-                <div className="relative">
+                <div className="relative mb-4">
                   <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
@@ -446,6 +622,72 @@ const SeniorExperienceSharing = () => {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                </div>
+
+                {/* Advanced Filters Section */}
+                <div className="border-t pt-4">
+                  <button
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                    className="flex items-center text-sm font-medium text-gray-700 hover:text-gray-900 mb-3"
+                  >
+                    <Filter className="h-4 w-4 mr-2" />
+                    Advanced Filters
+                    {showAdvancedFilters ? (
+                      <ChevronUp className="h-4 w-4 ml-2" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 ml-2" />
+                    )}
+                  </button>
+                  
+                  {showAdvancedFilters && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                      {/* Rating Filter */}
+                      <div className="relative">
+                        <Star className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                        <select 
+                          className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={filters.rating}
+                          onChange={(e) => setFilters({...filters, rating: e.target.value})}
+                        >
+                          <option value="">All Ratings</option>
+                          <option value="5">5 Stars</option>
+                          <option value="4">4+ Stars</option>
+                          <option value="3">3+ Stars</option>
+                        </select>
+                      </div>
+
+                      {/* Difficulty Filter */}
+                      <div className="relative">
+                        <Award className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                        <select 
+                          className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={filters.difficulty}
+                          onChange={(e) => setFilters({...filters, difficulty: e.target.value})}
+                        >
+                          <option value="">All Difficulties</option>
+                          <option value="easy">Easy</option>
+                          <option value="medium">Medium</option>
+                          <option value="hard">Hard</option>
+                        </select>
+                      </div>
+
+                      {/* Round Type Filter */}
+                      <div className="relative">
+                        <Clock className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                        <select 
+                          className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={filters.roundType}
+                          onChange={(e) => setFilters({...filters, roundType: e.target.value})}
+                        >
+                          <option value="">All Round Types</option>
+                          <option value="Online Assessment">Online Assessment</option>
+                          <option value="Technical Round">Technical Round</option>
+                          <option value="HR Round">HR Round</option>
+                          <option value="Managerial Round">Managerial Round</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -493,14 +735,99 @@ const SeniorExperienceSharing = () => {
               </div>
             ) : (
               <div className="space-y-6">
-                {filteredExperiences?.map((experience) => (
+                {filteredExperiences?.map((experience) => {
+                  const liked = user && (experience?.liked_by || []).some((likedId) => {
+                    if (!likedId) return false;
+                    if (typeof likedId === 'string') return likedId === user.id;
+                    if (likedId?._id) return likedId._id === user.id;
+                    return likedId === user.id;
+                  });
+                  return (
                   <ExperienceCard
-                    key={experience?.id}
-                    experience={experience}
+                    key={experience?.id || experience?._id}
+                    experience={{ ...experience, id: experience?.id || experience?._id }}
                     onLike={handleLikeExperience}
                     currentUser={user}
+                    liked={liked}
                   />
-                ))}
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : activeTab === 'mine' ? (
+          <>
+            <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+              <h2 className="text-2xl font-bold mb-4">My Experiences</h2>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search my experiences..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            {loadingMy ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span className="ml-3 text-gray-600">Loading your experiences...</span>
+              </div>
+            ) : myExperiences
+                ?.filter(exp => {
+                  const q = (searchQuery || '').toLowerCase();
+                  if (!q) return true;
+                  return (
+                    exp?.company_name?.toLowerCase()?.includes(q) ||
+                    exp?.position_title?.toLowerCase()?.includes(q) ||
+                    exp?.preparation_tips?.toLowerCase()?.includes(q)
+                  );
+                })?.length === 0 ? (
+              <div className="flex items-center justify-center py-12">
+                <Award className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No experiences yet</h3>
+                <p className="text-gray-500 mb-4">Share your first experience to see it here.</p>
+                <button
+                  onClick={() => setActiveTab('share')}
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Share Experience
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {myExperiences
+                  ?.filter(exp => {
+                    const q = (searchQuery || '').toLowerCase();
+                    if (!q) return true;
+                    return (
+                      exp?.company_name?.toLowerCase()?.includes(q) ||
+                      exp?.position_title?.toLowerCase()?.includes(q) ||
+                      exp?.preparation_tips?.toLowerCase()?.includes(q)
+                    );
+                  })
+                  ?.map((experience) => {
+                    const liked = user && (experience?.liked_by || []).some((likedId) => {
+                      if (!likedId) return false;
+                      if (typeof likedId === 'string') return likedId === user.id;
+                      if (likedId?._id) return likedId._id === user.id;
+                      return likedId === user.id;
+                    });
+                    return (
+                    <ExperienceCard
+                      key={experience?._id || experience?.id}
+                      experience={{ ...experience, id: experience?._id || experience?.id }}
+                      onLike={handleLikeExperience}
+                      currentUser={user}
+                      liked={liked}
+                      onDelete={handleDeleteExperience}
+                      isOwnExperience={true}
+                    />
+                    );
+                  })}
               </div>
             )}
           </>
@@ -508,6 +835,7 @@ const SeniorExperienceSharing = () => {
           <ShareExperienceForm
             onExperienceShared={() => {
               loadExperiences();
+              loadMyExperiences();
               setActiveTab('browse');
             }}
           />
