@@ -3,12 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import Icon from '../../../components/AppIcon';
 import Image from '../../../components/AppImage';
 
-const ActivityFeedItem = ({ activity }) => {
+const ActivityFeedItem = ({ activity, type, title, description, time, isRead }) => {
   const navigate = useNavigate();
+  
+  // Support both old prop format and new activity object format
+  const activityData = activity || { type, title, description, time, isRead };
 
   const handleClick = () => {
-    if (activity?.route) {
-      navigate(activity?.route);
+    if (activityData?.route) {
+      navigate(activityData?.route);
     }
   };
 
@@ -35,6 +38,7 @@ const ActivityFeedItem = ({ activity }) => {
   };
 
   const formatTimeAgo = (timestamp) => {
+    if (!timestamp) return '';
     const now = new Date();
     const activityTime = new Date(timestamp);
     const diffInMinutes = Math.floor((now - activityTime) / (1000 * 60));
@@ -52,52 +56,52 @@ const ActivityFeedItem = ({ activity }) => {
     <div 
       onClick={handleClick}
       className={`flex items-start gap-3 p-3 rounded-lg hover:bg-muted transition-smooth ${
-        activity?.route ? 'cursor-pointer' : ''
-      }`}
+        activityData?.route ? 'cursor-pointer' : ''
+      } ${activityData?.isRead ? 'opacity-75' : ''}`}
     >
-      <div className={`w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 ${getActivityColor(activity?.type)}`}>
-        <Icon name={getActivityIcon(activity?.type)} size={16} />
+      <div className={`w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 ${getActivityColor(activityData?.type)}`}>
+        <Icon name={getActivityIcon(activityData?.type)} size={16} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <p className="text-sm text-foreground mb-1">
-              <span className="font-medium">{activity?.action}</span>
-              {activity?.target && (
-                <span className="text-muted-foreground"> {activity?.target}</span>
+              <span className="font-medium">{activityData?.action || activityData?.title}</span>
+              {activityData?.target && (
+                <span className="text-muted-foreground"> {activityData?.target}</span>
               )}
             </p>
             
-            {activity?.details && (
+            {(activityData?.details || activityData?.description) && (
               <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
-                {activity?.details}
+                {activityData?.details || activityData?.description}
               </p>
             )}
             
-            {activity?.company && (
+            {activityData?.company && (
               <div className="flex items-center gap-2 mb-1">
-                {activity?.companyLogo && (
+                {activityData?.companyLogo && (
                   <div className="w-4 h-4 rounded overflow-hidden">
                     <Image 
-                      src={activity?.companyLogo} 
-                      alt={`${activity?.company} logo`}
+                      src={activityData?.companyLogo} 
+                      alt={`${activityData?.company} logo`}
                       className="w-full h-full object-cover"
                     />
                   </div>
                 )}
-                <span className="text-xs font-medium text-foreground">{activity?.company}</span>
+                <span className="text-xs font-medium text-foreground">{activityData?.company}</span>
               </div>
             )}
           </div>
           
           <span className="text-xs text-muted-foreground flex-shrink-0">
-            {formatTimeAgo(activity?.timestamp)}
+            {activityData?.timestamp ? formatTimeAgo(activityData?.timestamp) : (activityData?.time || '')}
           </span>
         </div>
         
-        {activity?.tags && activity?.tags?.length > 0 && (
+        {activityData?.tags && activityData?.tags?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
-            {activity?.tags?.slice(0, 3)?.map((tag, index) => (
+            {activityData?.tags?.slice(0, 3)?.map((tag, index) => (
               <span 
                 key={index}
                 className="px-2 py-1 bg-muted text-muted-foreground text-xs rounded-full"
@@ -105,9 +109,9 @@ const ActivityFeedItem = ({ activity }) => {
                 {tag}
               </span>
             ))}
-            {activity?.tags?.length > 3 && (
+            {activityData?.tags?.length > 3 && (
               <span className="text-xs text-muted-foreground">
-                +{activity?.tags?.length - 3} more
+                +{activityData?.tags?.length - 3} more
               </span>
             )}
           </div>

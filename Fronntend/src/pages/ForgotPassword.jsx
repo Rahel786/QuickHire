@@ -13,6 +13,7 @@ const ForgotPassword = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [devOTP, setDevOTP] = useState('');
   const navigate = useNavigate();
 
   const handleSendOTP = async () => {
@@ -25,6 +26,11 @@ const ForgotPassword = () => {
         setError(result.error);
       } else {
         setStep(2); // Move to OTP step
+        // Store OTP for dev mode display
+        if (result.otp) {
+          setDevOTP(result.otp);
+          console.log('OTP for development:', result.otp);
+        }
       }
     } catch (err) {
       setError('Failed to send OTP. Please try again.');
@@ -149,6 +155,12 @@ const ForgotPassword = () => {
 
             {step === 2 && (
               <div className="space-y-6">
+                {devOTP && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs font-semibold text-blue-900 mb-1">Development Mode - OTP:</p>
+                    <p className="text-lg font-mono font-bold text-blue-700">{devOTP}</p>
+                  </div>
+                )}
                 <div>
                   <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
                     Enter OTP

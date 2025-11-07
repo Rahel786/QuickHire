@@ -15,8 +15,8 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Check for stored user session
+  // Function to load user from storage
+  const loadUser = async () => {
     const storedUser = localStorage.getItem('user');
     const token = localStorage.getItem('token');
     
@@ -24,41 +24,71 @@ export const AuthProvider = ({ children }) => {
       try {
         const userData = JSON.parse(storedUser);
         // Verify token with backend
-        authAPI.getCurrentUser()
-          .then((response) => {
-            setUser(response.user);
-          })
-          .catch(() => {
-            // Token invalid, clear storage
-            localStorage.removeItem('user');
-            localStorage.removeItem('token');
-            setUser(null);
-          })
-          .finally(() => {
-            setLoading(false);
-          });
+        try {
+          const response = await authAPI.getCurrentUser();
+          setUser(response.user);
+        } catch (error) {
+          // Token invalid, clear storage
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+          setUser(null);
+        }
       } catch (e) {
         localStorage.removeItem('user');
         localStorage.removeItem('token');
         setUser(null);
-        setLoading(false);
       }
     } else {
-      setLoading(false);
+      setUser(null);
     }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    // Initial load
+    loadUser();
+
+    // Listen for storage changes (when token/user is updated)
+    const handleStorageChange = () => {
+      loadUser();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    // Also listen for custom storage event (for same-window updates)
+    window.addEventListener('localStorageUpdated', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('localStorageUpdated', handleStorageChange);
+    };
   }, []);
 
   // Auth methods
-  const signUp = async (email, password, name) => {
+  const signUp = async (email, password, name, college, batchYear, userType = 'student', yearsExperience = null, companyName = null) => {
     try {
-      const response = await authAPI.register(email, password, name);
-      if (response.user) {
+      const response = await authAPI.register(email, password, name, college, batchYear, userType, yearsExperience, companyName);
+      
+      // Check for error first
+      if (response && response.error) {
+        return { data: null, error: response.error };
+      }
+      
+      // Check for success response
+      if (response && response.user && response.token) {
+        // Token and user should already be stored in localStorage by authAPI.register
+        // But let's ensure user state is updated
         setUser(response.user);
+        // Dispatch event to notify other components
+        window.dispatchEvent(new Event('localStorageUpdated'));
         return { data: response, error: null };
       }
-      return { data: null, error: 'Registration failed' };
+      
+      // If we get here, something went wrong
+      console.error('Unexpected response format:', response);
+      return { data: null, error: response?.error || 'Registration failed. Please try again.' };
     } catch (error) {
-      const errorMessage = error.response?.data?.error || error.message || 'Sign up failed';
+      console.error('SignUp error:', error);
+      const errorMessage = error?.response?.data?.error || error?.message || 'Sign up failed. Please try again.';
       return { data: null, error: errorMessage };
     }
   };
@@ -66,11 +96,14 @@ export const AuthProvider = ({ children }) => {
   const signIn = async (email, password) => {
     try {
       const response = await authAPI.login(email, password);
+      if (response.error) {
+        return { data: null, error: response.error };
+      }
       if (response.user) {
         setUser(response.user);
         return { data: response, error: null };
       }
-      return { data: null, error: 'Login failed' };
+      return { data: null, error: response.error || 'Login failed' };
     } catch (error) {
       const errorMessage = error.response?.data?.error || error.message || 'Sign in failed';
       return { data: null, error: errorMessage };
@@ -104,6 +137,10 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateUser = (updatedUser) => {
+    setUser(updatedUser);
+  };
+
   const value = {
     user,
     loading,
@@ -111,6 +148,7 @@ export const AuthProvider = ({ children }) => {
     signIn,
     signOut,
     signInWithOAuth,
+    updateUser,
   };
 
   return (

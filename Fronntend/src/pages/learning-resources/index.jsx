@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Header from '../../components/ui/Header';
 import Icon from '../../components/AppIcon';
+import { useAuth } from '../../contexts/AuthContext';
 
 import TopicCard from './components/TopicCard';
 import LearningProgress from './components/LearningProgress';
@@ -9,6 +10,7 @@ import BookmarkedContent from './components/BookmarkedContent';
 import StudyNotes from './components/StudyNotes';
 
 const LearningResources = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('topics');
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState({
@@ -18,8 +20,8 @@ const LearningResources = () => {
     sortBy: 'relevance'
   });
 
-  // Mock data for learning topics
-  const [topics, setTopics] = useState([
+  // Base template for learning topics (all start at 0% progress)
+  const baseTopicsTemplate = [
     {
       id: 1,
       title: "Data Structures",
@@ -195,7 +197,111 @@ const LearningResources = () => {
         }
       ]
     }
-  ]);
+  ];
+
+  // Initialize topics with 0% progress for all users
+  const getDefaultTopics = () => {
+    return baseTopicsTemplate.map(topic => ({
+      ...topic,
+      progress: 0,
+      completedLessons: 0,
+      lessons: topic.lessons.map((lesson, index) => ({
+        ...lesson,
+        isCompleted: false,
+        isActive: index === 0 // First lesson is active
+      }))
+    }));
+  };
+
+  const [topics, setTopics] = useState(getDefaultTopics);
+
+  // Save user progress to localStorage
+  const saveUserProgress = (updatedTopics) => {
+    const userId = user?.id || 'guest';
+    const storageKey = `learning_progress_${userId}`;
+    
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(updatedTopics));
+    } catch (error) {
+      console.error('Error saving user progress:', error);
+    }
+  };
+
+  // Reload topics when user changes
+  useEffect(() => {
+    const userId = user?.id || 'guest';
+    const storageKey = `learning_progress_${userId}`;
+    
+    // Load user's progress from localStorage
+    const savedProgress = localStorage.getItem(storageKey);
+    
+    if (savedProgress) {
+      try {
+        const userProgress = JSON.parse(savedProgress);
+        // Merge base template with user progress
+        const mergedTopics = baseTopicsTemplate.map(topic => {
+          const savedTopic = userProgress.find(t => t.id === topic.id);
+          if (savedTopic) {
+            // Calculate progress based on completed lessons
+            const completedCount = savedTopic.lessons?.filter(l => l.isCompleted).length || 0;
+            const totalLessons = savedTopic.lessons?.length || topic.lessons.length;
+            const progress = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
+            
+            // Find next incomplete lesson
+            const nextIncompleteLesson = savedTopic.lessons?.find(l => !l.isCompleted);
+            const nextLesson = nextIncompleteLesson?.id || savedTopic.lessons?.[0]?.id || topic.nextLesson;
+            
+            return {
+              ...topic,
+              ...savedTopic,
+              progress,
+              completedLessons: completedCount,
+              nextLesson
+            };
+          }
+          // New topic for this user - all lessons incomplete
+          return {
+            ...topic,
+            progress: 0,
+            completedLessons: 0,
+            lessons: topic.lessons.map(lesson => ({
+              ...lesson,
+              isCompleted: false,
+              isActive: lesson.id === topic.lessons[0]?.id
+            }))
+          };
+        });
+        setTopics(mergedTopics);
+      } catch (error) {
+        console.error('Error loading user progress:', error);
+        // Fallback to default
+        const defaultTopics = baseTopicsTemplate.map(topic => ({
+          ...topic,
+          progress: 0,
+          completedLessons: 0,
+          lessons: topic.lessons.map((lesson, index) => ({
+            ...lesson,
+            isCompleted: false,
+            isActive: index === 0
+          }))
+        }));
+        setTopics(defaultTopics);
+      }
+    } else {
+      // New user - initialize all topics with 0% progress
+      const defaultTopics = baseTopicsTemplate.map(topic => ({
+        ...topic,
+        progress: 0,
+        completedLessons: 0,
+        lessons: topic.lessons.map((lesson, index) => ({
+          ...lesson,
+          isCompleted: false,
+          isActive: index === 0
+        }))
+      }));
+      setTopics(defaultTopics);
+    }
+  }, [user?.id]);
 
   // Mock progress data
   const progressData = {
@@ -381,17 +487,171 @@ const LearningResources = () => {
     ));
   };
 
+  // Mark lesson as complete/incomplete
+  const handleToggleLessonComplete = (topicId, lessonId) => {
+    const updatedTopics = topics.map(topic => {
+      if (topic.id === topicId) {
+        const updatedLessons = topic.lessons.map(lesson => {
+          if (lesson.id === lessonId) {
+            const newCompletedState = !lesson.isCompleted;
+            return {
+              ...lesson,
+              isCompleted: newCompletedState,
+              isActive: !newCompletedState // Make it active if marking as incomplete
+            };
+          }
+          // If we're marking a lesson as complete, find and activate the next incomplete lesson
+          return lesson;
+        });
+
+        // After marking complete, activate the next incomplete lesson
+        if (updatedLessons.find(l => l.id === lessonId)?.isCompleted) {
+          const currentIndex = updatedLessons.findIndex(l => l.id === lessonId);
+          const nextIncomplete = updatedLessons.slice(currentIndex + 1).find(l => !l.isCompleted);
+          if (nextIncomplete) {
+            const nextIndex = updatedLessons.findIndex(l => l.id === nextIncomplete.id);
+            updatedLessons[nextIndex] = { ...updatedLessons[nextIndex], isActive: true };
+          }
+        }
+
+        // Calculate new progress
+        const completedCount = updatedLessons.filter(l => l.isCompleted).length;
+        const totalLessons = updatedLessons.length;
+        const progress = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
+
+        // Find next incomplete lesson
+        const nextIncompleteLesson = updatedLessons.find(l => !l.isCompleted);
+        const nextLesson = nextIncompleteLesson?.id || updatedLessons[updatedLessons.length - 1]?.id;
+
+        return {
+          ...topic,
+          lessons: updatedLessons,
+          progress,
+          completedLessons: completedCount,
+          nextLesson
+        };
+      }
+      return topic;
+    });
+
+    setTopics(updatedTopics);
+    saveUserProgress(updatedTopics);
+  };
+
   const handleBookmark = (topicId) => {
-    setTopics(topics?.map(topic =>
-      topic?.id === topicId
-        ? { ...topic, isBookmarked: !topic?.isBookmarked }
-        : topic
+    const topic = topics.find(t => t.id === topicId);
+    const isCurrentlyBookmarked = topic?.isBookmarked;
+    
+    // Toggle bookmark status on topic
+    setTopics(topics?.map(t =>
+      t?.id === topicId
+        ? { ...t, isBookmarked: !t?.isBookmarked }
+        : t
     ));
+    
+    // Add or remove from bookmarks array
+    if (isCurrentlyBookmarked) {
+      // Remove from bookmarks
+      setBookmarks(bookmarks.filter(b => b.topicId !== topicId));
+    } else if (topic) {
+      // Add to bookmarks
+      const newBookmark = {
+        id: Date.now(),
+        topicId: topicId,
+        title: topic.title,
+        description: topic.description,
+        topic: topic.category || 'General',
+        icon: topic.icon,
+        difficulty: topic.difficulty,
+        duration: topic.estimatedTime,
+        savedDate: 'Just now'
+      };
+      setBookmarks([newBookmark, ...bookmarks]);
+    }
+  };
+
+  // Map topics and lessons to external learning resources
+  const getLearningResourceUrl = (topicId, lessonId) => {
+    const topic = topics.find(t => t.id === topicId);
+    if (!topic) return null;
+
+    const topicTitle = topic.title.toLowerCase();
+    const lesson = lessonId ? topic.lessons?.find(l => l.id === lessonId) : null;
+    const lessonTitle = lesson?.title?.toLowerCase() || '';
+
+    // Data Structures & Algorithms resources
+    if (topicTitle.includes('data structure') || topicTitle.includes('dsa')) {
+      if (lessonTitle.includes('array') || lessonTitle.includes('list')) {
+        return 'https://www.geeksforgeeks.org/array-data-structure/';
+      } else if (lessonTitle.includes('linked list')) {
+        return 'https://www.geeksforgeeks.org/data-structures/linked-list/';
+      } else if (lessonTitle.includes('stack') || lessonTitle.includes('queue')) {
+        return 'https://www.geeksforgeeks.org/stack-data-structure/';
+      } else if (lessonTitle.includes('tree') || lessonTitle.includes('bst')) {
+        return 'https://www.geeksforgeeks.org/binary-tree-data-structure/';
+      } else if (lessonTitle.includes('graph')) {
+        return 'https://www.geeksforgeeks.org/graph-data-structure-and-algorithms/';
+      } else if (lessonTitle.includes('sort') || lessonTitle.includes('search')) {
+        return 'https://www.geeksforgeeks.org/sorting-algorithms/';
+      } else {
+        return 'https://www.geeksforgeeks.org/data-structures/';
+      }
+    }
+    
+    // DBMS resources
+    if (topicTitle.includes('database') || topicTitle.includes('dbms')) {
+      if (lessonTitle.includes('sql') || lessonTitle.includes('query')) {
+        return 'https://www.w3schools.com/sql/';
+      } else if (lessonTitle.includes('normalization') || lessonTitle.includes('normal')) {
+        return 'https://www.geeksforgeeks.org/normalization-in-dbms/';
+      } else if (lessonTitle.includes('join')) {
+        return 'https://www.w3schools.com/sql/sql_join.asp';
+      } else if (lessonTitle.includes('index')) {
+        return 'https://www.geeksforgeeks.org/indexing-in-databases-set-1/';
+      } else if (lessonTitle.includes('design')) {
+        return 'https://www.geeksforgeeks.org/database-design-in-dbms/';
+      } else {
+        return 'https://www.geeksforgeeks.org/dbms/';
+      }
+    }
+    
+    // OOP resources
+    if (topicTitle.includes('object-oriented') || topicTitle.includes('oop')) {
+      if (lessonTitle.includes('inheritance') || lessonTitle.includes('polymorphism')) {
+        return 'https://www.freecodecamp.org/news/object-oriented-programming-concepts/';
+      } else if (lessonTitle.includes('encapsulation') || lessonTitle.includes('abstraction')) {
+        return 'https://www.geeksforgeeks.org/object-oriented-programming-oops-concept-in-java/';
+      } else if (lessonTitle.includes('design pattern')) {
+        return 'https://refactoring.guru/design-patterns';
+      } else if (lessonTitle.includes('basic') || lessonTitle.includes('fundamental')) {
+        return 'https://www.freecodecamp.org/news/object-oriented-programming-concepts/';
+      } else {
+        return 'https://www.geeksforgeeks.org/object-oriented-programming-oops-concept-in-java/';
+      }
+    }
+
+    // Default fallback - YouTube search
+    const searchQuery = encodeURIComponent(`${topic.title} ${lesson?.title || 'tutorial'}`);
+    return `https://www.youtube.com/results?search_query=${searchQuery}`;
   };
 
   const handleStartLesson = (topicId, lessonId) => {
-    console.log(`Starting lesson ${lessonId} from topic ${topicId}`);
-    // In a real app, this would navigate to the lesson content
+    const resourceUrl = getLearningResourceUrl(topicId, lessonId);
+    
+    if (resourceUrl) {
+      // Open in new tab
+      window.open(resourceUrl, '_blank', 'noopener,noreferrer');
+    } else {
+      // Fallback: scroll to topic if URL not found
+      const topicElement = document.getElementById(`topic-${topicId}`);
+      if (topicElement) {
+        topicElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const topic = topics.find(t => t.id === topicId);
+        if (topic && !topic.isExpanded) {
+          handleToggleExpand(topicId);
+        }
+      }
+    }
   };
 
   const handleRemoveBookmark = (bookmarkId) => {
@@ -399,8 +659,23 @@ const LearningResources = () => {
   };
 
   const handleOpenContent = (bookmark) => {
-    console.log('Opening bookmarked content:', bookmark);
-    // In a real app, this would navigate to the specific content
+    // Open bookmarked content in external resource
+    if (bookmark.topicId) {
+      const resourceUrl = getLearningResourceUrl(bookmark.topicId, null);
+      if (resourceUrl) {
+        window.open(resourceUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        // Fallback: scroll to topic
+        const topicElement = document.getElementById(`topic-${bookmark.topicId}`);
+        if (topicElement) {
+          topicElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const topic = topics.find(t => t.id === bookmark.topicId);
+          if (topic && !topic.isExpanded) {
+            handleToggleExpand(bookmark.topicId);
+          }
+        }
+      }
+    }
   };
 
   const handleAddNote = (noteData) => {
@@ -426,7 +701,7 @@ const LearningResources = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="pt-16">
+      <main className="pt-24">
         <div className="max-w-7xl mx-auto px-6 py-8">
           {/* Page Header */}
           <div className="mb-8">
@@ -485,15 +760,16 @@ const LearningResources = () => {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {filteredTopics?.map((topic) => (
-                      <TopicCard
-                        key={topic?.id}
-                        topic={topic}
-                        onToggleExpand={handleToggleExpand}
-                        onBookmark={handleBookmark}
-                        onStartLesson={handleStartLesson}
-                      />
-                    ))}
+                {filteredTopics?.map((topic) => (
+                  <TopicCard
+                    key={topic?.id}
+                    topic={topic}
+                    onToggleExpand={handleToggleExpand}
+                    onBookmark={handleBookmark}
+                    onStartLesson={handleStartLesson}
+                    onToggleLessonComplete={handleToggleLessonComplete}
+                  />
+                ))}
                   </div>
                 )}
               </>

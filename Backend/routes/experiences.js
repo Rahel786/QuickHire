@@ -54,6 +54,28 @@ router.get('/colleges', async (req, res) => {
   }
 });
 
+// Get current user's experiences
+router.get('/my', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user?.id || req.headers['user-id'];
+    if (!userId) {
+      return res.status(401).json({ error: 'User authentication required' });
+    }
+
+    const experiences = await Experience.find({ user_id: userId })
+      .populate('user_id', 'name email college')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      experiences,
+      count: experiences.length
+    });
+  } catch (error) {
+    console.error('Get my experiences error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get experiences by specific college
 router.get('/colleges/:collegeName', async (req, res) => {
   try {
@@ -91,7 +113,8 @@ router.post('/', requireAuth, async (req, res) => {
     const newExperience = new Experience({
       user_id: userId,
       ...experienceData,
-      status: 'published'
+      status: 'published',
+      liked_by: []
     });
 
     await newExperience.save();
@@ -107,15 +130,34 @@ router.post('/', requireAuth, async (req, res) => {
   }
 });
 
-// Like an experience
-router.post('/:id/like', async (req, res) => {
+// Like an experience (one per user)
+router.post('/:id/like', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const experience = await Experience.findByIdAndUpdate(
-      id,
-      { $inc: { likes_count: 1 } },
-      { new: true }
-    ).populate('user_id', 'name email college');
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User authentication required' });
+    }
+
+    const experience = await Experience.findById(id);
+
+    if (!experience) {
+      return res.status(404).json({ error: 'Experience not found' });
+    }
+
+    const alreadyLiked = experience.liked_by?.some((likedId) => likedId.toString() === userId);
+    if (alreadyLiked) {
+      return res.status(200).json({
+        experience,
+        message: 'Already liked'
+      });
+    }
+
+    experience.likes_count = (experience.likes_count || 0) + 1;
+    experience.liked_by = [...(experience.liked_by || []), userId];
+    await experience.save();
+    await experience.populate('user_id', 'name email college');
 
     if (!experience) {
       return res.status(404).json({ error: 'Experience not found' });
@@ -127,6 +169,38 @@ router.post('/:id/like', async (req, res) => {
     });
   } catch (error) {
     console.error('Like experience error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete an experience (owner only)
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User authentication required' });
+    }
+
+    const experience = await Experience.findById(id);
+
+    if (!experience) {
+      return res.status(404).json({ error: 'Experience not found' });
+    }
+
+    // Check if user is the owner
+    if (experience.user_id.toString() !== userId) {
+      return res.status(403).json({ error: 'You can only delete your own experiences' });
+    }
+
+    await Experience.findByIdAndDelete(id);
+
+    res.json({
+      message: 'Experience deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete experience error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

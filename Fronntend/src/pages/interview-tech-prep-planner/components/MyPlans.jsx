@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Calendar, Clock, BookOpen, CheckCircle, Play, Trash2, RefreshCw, Award } from 'lucide-react';
+import { learningsAPI } from '../../../utils/api';
 
 const MyPlans = ({ plans, onCreateNew, onRefresh }) => {
   const [loading, setLoading] = useState(false);
@@ -24,17 +25,28 @@ const MyPlans = ({ plans, onCreateNew, onRefresh }) => {
     return 'text-gray-600 bg-gray-100';
   };
 
+  const resolvePlanId = (plan) => plan?._id || plan?.id;
+  const resolveDayId = (day) => day?._id || day?.id;
+
   const handleDeletePlan = async (planId) => {
     if (!confirm('Are you sure you want to delete this plan?')) return;
 
     setLoading(true);
     try {
-      const storedPlans = localStorage.getItem('prep_plans');
-      if (storedPlans) {
-        const plans = JSON.parse(storedPlans);
-        const updatedPlans = plans.filter(plan => plan.id !== planId);
-        localStorage.setItem('prep_plans', JSON.stringify(updatedPlans));
-        onRefresh?.();
+      // Try backend first
+      try {
+        await learningsAPI.deletePlan(planId);
+        await onRefresh?.();
+        return;
+      } catch (apiErr) {
+        // Fallback to localStorage
+        const storedPlans = localStorage.getItem('prep_plans');
+        if (storedPlans) {
+          const plans = JSON.parse(storedPlans);
+          const updatedPlans = plans.filter(p => (p._id || p.id) !== planId);
+          localStorage.setItem('prep_plans', JSON.stringify(updatedPlans));
+          onRefresh?.();
+        }
       }
     } catch (error) {
       console.error('Error deleting plan:', error);
@@ -45,29 +57,41 @@ const MyPlans = ({ plans, onCreateNew, onRefresh }) => {
 
   const handleToggleDayCompletion = async (planId, dayId, isCompleted) => {
     try {
-      const storedPlans = localStorage.getItem('prep_plans');
-      if (storedPlans) {
-        const plans = JSON.parse(storedPlans);
-        const updatedPlans = plans.map(plan => {
-          if (plan.id === planId) {
-            return {
-              ...plan,
-              daily_plans: plan.daily_plans.map(day => {
-                if (day.id === dayId) {
-                  return {
-                    ...day,
-                    is_completed: !isCompleted,
-                    completed_at: !isCompleted ? new Date().toISOString() : null
-                  };
-                }
-                return day;
-              })
-            };
-          }
-          return plan;
-        });
-        localStorage.setItem('prep_plans', JSON.stringify(updatedPlans));
-        onRefresh?.();
+      // Update optimistically in backend
+      // We need the updated daily_plans array
+      // Fetch current plan from props
+      const current = plans.find(p => resolvePlanId(p) === planId);
+      if (!current) return;
+      const updatedDaily = (current.daily_plans || []).map((day) => {
+        const id = resolveDayId(day);
+        if (id === dayId) {
+          return {
+            ...day,
+            is_completed: !isCompleted,
+            completed_at: !isCompleted ? new Date().toISOString() : null
+          };
+        }
+        return day;
+      });
+
+      try {
+        await learningsAPI.updatePlan(planId, { daily_plans: updatedDaily });
+        await onRefresh?.();
+        return;
+      } catch (apiErr) {
+        // Fallback to localStorage
+        const storedPlans = localStorage.getItem('prep_plans');
+        if (storedPlans) {
+          const localPlans = JSON.parse(storedPlans);
+          const updatedPlans = localPlans.map(plan => {
+            if ((plan._id || plan.id) === planId) {
+              return { ...plan, daily_plans: updatedDaily };
+            }
+            return plan;
+          });
+          localStorage.setItem('prep_plans', JSON.stringify(updatedPlans));
+          onRefresh?.();
+        }
       }
     } catch (error) {
       console.error('Error updating day completion:', error);
@@ -143,10 +167,11 @@ const MyPlans = ({ plans, onCreateNew, onRefresh }) => {
             const progress = calculateProgress(plan);
             const daysRemaining = getDaysRemaining(plan);
             const isCompleted = progress === 100;
-            const isExpanded = expandedPlan === plan?.id;
+            const planKey = resolvePlanId(plan);
+            const isExpanded = expandedPlan === planKey;
 
             return (
-              <div key={plan?.id} className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow">
+              <div key={planKey} className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow">
                 {/* Plan Header */}
                 <div className="p-6 border-b border-gray-100">
                   <div className="flex items-start justify-between">
@@ -159,7 +184,7 @@ const MyPlans = ({ plans, onCreateNew, onRefresh }) => {
                           {plan?.technologies?.name}
                         </span>
                         <span className="mx-2">•</span>
-                        <span>Created {formatDate(plan?.created_at)}</span>
+                        <span>Created {formatDate(plan?.created_at || plan?.createdAt)}</span>
                       </div>
                       
                       {/* Progress */}
@@ -211,13 +236,13 @@ const MyPlans = ({ plans, onCreateNew, onRefresh }) => {
                     {/* Actions */}
                     <div className="flex flex-col space-y-2 ml-4">
                       <button
-                        onClick={() => setExpandedPlan(isExpanded ? null : plan?.id)}
+                        onClick={() => setExpandedPlan(isExpanded ? null : planKey)}
                         className="text-purple-600 hover:text-purple-800 text-sm font-medium"
                       >
                         {isExpanded ? 'Hide Details' : 'View Details'}
                       </button>
                       <button
-                        onClick={() => handleDeletePlan(plan?.id)}
+                        onClick={() => handleDeletePlan(planKey)}
                         disabled={loading}
                         className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
                       >
@@ -236,12 +261,12 @@ const MyPlans = ({ plans, onCreateNew, onRefresh }) => {
                         ?.sort((a, b) => a?.day_number - b?.day_number)
                         ?.map((day) => (
                           <div
-                            key={day?.id}
+                            key={resolveDayId(day)}
                             className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                           >
                             <div className="flex items-center">
                               <button
-                                onClick={() => handleToggleDayCompletion(plan?.id, day?.id, day?.is_completed)}
+                                onClick={() => handleToggleDayCompletion(planKey, resolveDayId(day), day?.is_completed)}
                                 className={`mr-3 w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                                   day?.is_completed
                                     ? 'bg-green-500 border-green-500 text-white' :'border-gray-300 hover:border-green-500'

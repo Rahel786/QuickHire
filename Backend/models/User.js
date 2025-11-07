@@ -22,7 +22,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['student', 'admin', 'recruiter'],
+    enum: ['student', 'professional', 'admin', 'recruiter'],
     default: 'student'
   },
   college: {
@@ -32,8 +32,28 @@ const userSchema = new mongoose.Schema({
   batch_year: {
     type: Number
   },
+  years_experience: {
+    type: Number,
+    min: 0
+  },
+  company_name: {
+    type: String,
+    trim: true
+  },
   profile_picture: {
     type: String
+  },
+  technical_skills: {
+    type: [String],
+    default: []
+  },
+  interested_roles: {
+    type: [String],
+    default: []
+  },
+  onboarding_completed: {
+    type: Boolean,
+    default: false
   },
   is_active: {
     type: Boolean,

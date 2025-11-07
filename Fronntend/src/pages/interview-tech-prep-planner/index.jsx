@@ -339,6 +339,13 @@ const InterviewTechPrepPlanner = () => {
             </div>
             <div className="flex items-center space-x-4">
               <button
+                onClick={() => setCurrentStep('view')}
+                className="inline-flex items-center px-4 py-2 bg-white text-gray-700 border border-gray-300 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <BookOpen className="h-4 w-4 mr-2" />
+                My Plans
+              </button>
+              <button
                 onClick={resetFlow}
                 className="inline-flex items-center px-4 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors"
               >

@@ -415,7 +415,7 @@ const JobSearchResults = () => {
       <div className="min-h-screen bg-background">
         <Header />
         
-        <main className="pt-20 pb-12">
+        <main className="pt-24 pb-12">
           <div className="max-w-7xl mx-auto px-6">
             {/* Page Header */}
             <div className="mb-8">

@@ -6,7 +6,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:80
 // Create axios instance with default config
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -47,17 +47,31 @@ export const authAPI = {
     }
   },
   
-  register: async (email, password, name) => {
+  register: async (email, password, name, college, batch_year, user_type = 'student', years_experience = null, company_name = null) => {
     try {
-      const response = await apiClient.post('/auth/register', { email, password, name });
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
+      const response = await apiClient.post('/auth/register', { 
+        email, 
+        password, 
+        name, 
+        college: college || null, 
+        batch_year: batch_year || null,
+        user_type: user_type || 'student',
+        years_experience: years_experience || null,
+        company_name: company_name || null
+      });
+      
+      if (response && response.data) {
+        if (response.data.token) {
+          localStorage.setItem('token', response.data.token);
+          localStorage.setItem('user', JSON.stringify(response.data.user));
+        }
+        return response.data;
       }
-      return response.data;
+      
+      return { error: 'Invalid response from server' };
     } catch (error) {
       console.error('Register error:', error);
-      const errorMessage = error.response?.data?.error || 'Registration failed. Please try again.';
+      const errorMessage = error?.response?.data?.error || error?.message || 'Registration failed. Please try again.';
       return { error: errorMessage };
     }
   },
@@ -73,16 +87,23 @@ export const authAPI = {
     }
   },
 
-  verifyOTPRegister: async (email, otp, password, name, college, batch_year) => {
+  verifyOTPRegister: async (email, otp, password, name, college, batch_year, user_type = 'student', years_experience = null, company_name = null) => {
     try {
       const response = await apiClient.post('/auth/verify-otp-register', {
         email,
         otp,
         password,
         name,
-        college,
-        batch_year
+        college: college || null,
+        batch_year: batch_year || null,
+        user_type: user_type || 'student',
+        years_experience: years_experience || null,
+        company_name: company_name || null
       });
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
       return response.data;
     } catch (error) {
       console.error('Verify OTP error:', error);
@@ -130,6 +151,46 @@ export const authAPI = {
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+  },
+
+  updateProfile: async (updates) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No token found in localStorage');
+        return { error: 'Authentication required. Please log in again.' };
+      }
+
+      console.log('updateProfile - Sending updates:', JSON.stringify(updates, null, 2));
+      
+      // The interceptor already adds the Authorization header, so we don't need to add it again
+      const response = await apiClient.put('/auth/me', updates);
+      
+      console.log('updateProfile - Response received:', response.data);
+      
+      if (response.data?.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+        window.dispatchEvent(new Event('localStorageUpdated'));
+      }
+      return response.data;
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      console.error('Error response:', error?.response?.data);
+      console.error('Error status:', error?.response?.status);
+      console.error('Error config:', error?.config);
+      console.error('Request URL:', error?.config?.url);
+      console.error('Request data:', error?.config?.data);
+      console.error('Request headers:', error?.config?.headers);
+      
+      // Include debug info from backend if available
+      const errorData = error?.response?.data || {};
+      const errorMessage = errorData.error || error?.message || 'Failed to update profile. Please try again.';
+      
+      return { 
+        error: errorMessage,
+        debug: errorData.debug // Pass through debug info from backend
+      };
+    }
   }
 };
 
@@ -184,6 +245,17 @@ export const experiencesAPI = {
     }
   },
   
+  // Get current user's experiences
+  getMyExperiences: async () => {
+    try {
+      const response = await apiClient.get('/experiences/my');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching my experiences:', error);
+      throw error;
+    }
+  },
+  
   // Like an experience
   likeExperience: async (experienceId) => {
     try {
@@ -191,6 +263,17 @@ export const experiencesAPI = {
       return response.data;
     } catch (error) {
       console.error('Error liking experience:', error);
+      throw error;
+    }
+  },
+
+  // Delete an experience
+  deleteExperience: async (experienceId) => {
+    try {
+      const response = await apiClient.delete(`/experiences/${experienceId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting experience:', error);
       throw error;
     }
   }
