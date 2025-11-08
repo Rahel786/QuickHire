@@ -11,7 +11,7 @@ const Header = () => {
   const { user, signOut } = useAuth();
 
   const navigationItems = [
-    { label: 'Dashboard', path: '/user-dashboard', icon: 'LayoutDashboard' },
+    { label: 'Dashboard', path: '/', icon: 'LayoutDashboard' },
     { label: 'Experiences', path: '/senior-experience-sharing', icon: 'Users' },
     { label: 'Interview Prep', path: '/interview-tech-prep-planner', icon: 'Target' },
     { label: 'Jobs', path: '/job-search-results', icon: 'Briefcase' },
@@ -37,7 +37,7 @@ const Header = () => {
       <header className="fixed top-0 left-0 right-0 bg-card border-b border-border z-100">
         <div className="flex items-center justify-between h-16 px-6">
           {/* Logo */}
-          <Link to="/user-dashboard" className="flex items-center space-x-2">
+          <Link to="/" className="flex items-center space-x-2">
             <div className="flex items-center justify-center w-8 h-8 bg-primary rounded-lg">
               <Icon name="Zap" size={20} color="white" />
             </div>

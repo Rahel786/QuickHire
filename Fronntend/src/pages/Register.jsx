@@ -198,7 +198,7 @@ const Register = () => {
     if (!userData.onboarding_completed) {
       navigate('/onboarding', { replace: true });
     } else {
-      navigate('/user-dashboard', { replace: true });
+      navigate('/', { replace: true });
     }
   };
 
