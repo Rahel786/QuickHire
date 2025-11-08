@@ -1,93 +1,92 @@
-// Backend/routes/admin.js
 import express from 'express';
 import { User } from '../models/User.js';
 import { Experience } from '../models/Experience.js';
 import { LearningPlan } from '../models/LearningPlan.js';
-import { isAdmin } from '../middleware/adminAuth.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Apply admin middleware to all routes
-router.use(isAdmin);
-
-// ==================== DASHBOARD STATS ====================
-router.get('/stats', async (req, res) => {
+// Middleware to check if user is admin
+const requireAdmin = async (req, res, next) => {
   try {
-    const [
-      totalUsers,
-      activeUsers,
-      totalExperiences,
-      totalPlans,
-      recentUsers
-    ] = await Promise.all([
-      User.countDocuments(),
-      User.countDocuments({ is_active: true }),
-      Experience.countDocuments(),
-      LearningPlan.countDocuments(),
-      User.countDocuments({ 
-        createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } 
-      })
-    ]);
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    next();
+  } catch (error) {
+    console.error('Admin auth error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Apply authentication and admin check to all routes
+router.use(requireAuth);
+router.use(requireAdmin);
+
+// ============= USER MANAGEMENT =============
+
+// Get user statistics
+router.get('/users/stats', async (req, res) => {
+  try {
+    const total = await User.countDocuments();
+    const active = await User.countDocuments({ is_active: true });
+    
+    // Users created this month
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    const newThisMonth = await User.countDocuments({
+      createdAt: { $gte: startOfMonth }
+    });
 
     res.json({
-      users: {
-        total: totalUsers,
-        active: activeUsers,
-        new: recentUsers
-      },
-      experiences: {
-        total: totalExperiences,
-        pending: 0, // Can be enhanced with status field
-        approved: totalExperiences
-      },
-      plans: {
-        total: totalPlans,
-        active: await LearningPlan.countDocuments({ status: 'active' }),
-        completed: await LearningPlan.countDocuments({ status: 'completed' })
-      },
-      events: {
-        total: 0, // Placeholder
-        upcoming: 0,
-        past: 0
-      }
+      total,
+      active,
+      newThisMonth
     });
   } catch (error) {
-    console.error('Error fetching admin stats:', error);
+    console.error('Error fetching user stats:', error);
     res.status(500).json({ error: 'Failed to fetch statistics' });
   }
 });
 
-// ==================== USER MANAGEMENT ====================
+// Get all users with pagination and search
 router.get('/users', async (req, res) => {
   try {
-    const { search, role, status, page = 1, limit = 50 } = req.query;
-    
-    const query = {};
-    
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    if (role) query.role = role;
-    if (status === 'active') query.is_active = true;
-    if (status === 'inactive') query.is_active = false;
+    const { page = 1, limit = 10, search = '' } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const users = await User.find(query)
+    // Build search query
+    const searchQuery = search ? {
+      $or: [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { college: { $regex: search, $options: 'i' } },
+        { company_name: { $regex: search, $options: 'i' } }
+      ]
+    } : {};
+
+    const users = await User.find(searchQuery)
       .select('-password')
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
+      .skip(skip)
+      .limit(parseInt(limit));
 
-    const total = await User.countDocuments(query);
+    const total = await User.countDocuments(searchQuery);
 
     res.json({
       users,
       total,
       page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit))
+      pageSize: parseInt(limit),
+      totalPages: Math.ceil(total / parseInt(limit))
     });
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -95,47 +94,40 @@ router.get('/users', async (req, res) => {
   }
 });
 
-router.get('/users/:userId', async (req, res) => {
+// Get specific user
+router.get('/users/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.params.userId).select('-password');
-    
+    const user = await User.findById(req.params.id).select('-password');
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    // Get user statistics
-    const [experiencesCount, plansCount] = await Promise.all([
-      Experience.countDocuments({ user_id: user._id }),
-      LearningPlan.countDocuments({ user_id: user._id })
-    ]);
-
-    res.json({
-      user,
-      stats: {
-        experiences: experiencesCount,
-        plans: plansCount
-      }
-    });
+    res.json({ user });
   } catch (error) {
     console.error('Error fetching user:', error);
     res.status(500).json({ error: 'Failed to fetch user' });
   }
 });
 
-router.put('/users/:userId', async (req, res) => {
+// Update user
+router.put('/users/:id', async (req, res) => {
   try {
-    const { name, email, role, is_active, college, batch_year } = req.body;
+    const { is_active, role, ...otherUpdates } = req.body;
     
+    const updates = {};
+    if (is_active !== undefined) updates.is_active = is_active;
+    if (role) updates.role = role;
+    
+    // Add other allowed updates
+    const allowedFields = ['name', 'college', 'batch_year', 'company_name', 'years_experience'];
+    allowedFields.forEach(field => {
+      if (otherUpdates[field] !== undefined) {
+        updates[field] = otherUpdates[field];
+      }
+    });
+
     const user = await User.findByIdAndUpdate(
-      req.params.userId,
-      {
-        ...(name && { name }),
-        ...(email && { email }),
-        ...(role && { role }),
-        ...(typeof is_active === 'boolean' && { is_active }),
-        ...(college && { college }),
-        ...(batch_year && { batch_year })
-      },
+      req.params.id,
+      { $set: updates },
       { new: true, runValidators: true }
     ).select('-password');
 
@@ -143,56 +135,73 @@ router.put('/users/:userId', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ user, message: 'User updated successfully' });
+    res.json({
+      user,
+      message: 'User updated successfully'
+    });
   } catch (error) {
     console.error('Error updating user:', error);
     res.status(500).json({ error: 'Failed to update user' });
   }
 });
 
-router.delete('/users/:userId', async (req, res) => {
+// Delete user
+router.delete('/users/:id', async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.userId);
+    const user = await User.findByIdAndDelete(req.params.id);
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Also delete user's related data
-    await Promise.all([
-      Experience.deleteMany({ user_id: user._id }),
-      LearningPlan.deleteMany({ user_id: user._id })
-    ]);
+    await Experience.deleteMany({ user_id: req.params.id });
+    await LearningPlan.deleteMany({ user_id: req.params.id });
 
-    res.json({ message: 'User and related data deleted successfully' });
+    res.json({ message: 'User deleted successfully' });
   } catch (error) {
     console.error('Error deleting user:', error);
     res.status(500).json({ error: 'Failed to delete user' });
   }
 });
 
-// ==================== EXPERIENCE MANAGEMENT ====================
+// ============= EXPERIENCE MANAGEMENT =============
+
+// Get experience statistics
+router.get('/experiences/stats', async (req, res) => {
+  try {
+    const total = await Experience.countDocuments();
+    
+    // Experiences created this week
+    const startOfWeek = new Date();
+    startOfWeek.setDate(startOfWeek.getDate() - 7);
+    const thisWeek = await Experience.countDocuments({
+      createdAt: { $gte: startOfWeek }
+    });
+
+    res.json({
+      total,
+      thisWeek
+    });
+  } catch (error) {
+    console.error('Error fetching experience stats:', error);
+    res.status(500).json({ error: 'Failed to fetch statistics' });
+  }
+});
+
+// Get all experiences with pagination and filtering
 router.get('/experiences', async (req, res) => {
   try {
-    const { search, company, status, page = 1, limit = 50 } = req.query;
-    
-    const query = {};
-    
-    if (search) {
-      query.$or = [
-        { company_name: { $regex: search, $options: 'i' } },
-        { position_title: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    if (company) query.company_name = { $regex: company, $options: 'i' };
-    if (status) query.status = status;
+    const { page = 1, limit = 10, status = '' } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const query = status ? { status } : {};
 
     const experiences = await Experience.find(query)
       .populate('user_id', 'name email')
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
+      .skip(skip)
+      .limit(parseInt(limit));
 
     const total = await Experience.countDocuments(query);
 
@@ -200,7 +209,8 @@ router.get('/experiences', async (req, res) => {
       experiences,
       total,
       page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit))
+      pageSize: parseInt(limit),
+      totalPages: Math.ceil(total / parseInt(limit))
     });
   } catch (error) {
     console.error('Error fetching experiences:', error);
@@ -208,30 +218,35 @@ router.get('/experiences', async (req, res) => {
   }
 });
 
-router.put('/experiences/:experienceId', async (req, res) => {
+// Update experience status
+router.put('/experiences/:id', async (req, res) => {
   try {
     const { status } = req.body;
     
     const experience = await Experience.findByIdAndUpdate(
-      req.params.experienceId,
-      { status },
-      { new: true }
+      req.params.id,
+      { $set: { status } },
+      { new: true, runValidators: true }
     ).populate('user_id', 'name email');
 
     if (!experience) {
       return res.status(404).json({ error: 'Experience not found' });
     }
 
-    res.json({ experience, message: 'Experience updated successfully' });
+    res.json({
+      experience,
+      message: 'Experience updated successfully'
+    });
   } catch (error) {
     console.error('Error updating experience:', error);
     res.status(500).json({ error: 'Failed to update experience' });
   }
 });
 
-router.delete('/experiences/:experienceId', async (req, res) => {
+// Delete experience
+router.delete('/experiences/:id', async (req, res) => {
   try {
-    const experience = await Experience.findByIdAndDelete(req.params.experienceId);
+    const experience = await Experience.findByIdAndDelete(req.params.id);
     
     if (!experience) {
       return res.status(404).json({ error: 'Experience not found' });
@@ -244,152 +259,105 @@ router.delete('/experiences/:experienceId', async (req, res) => {
   }
 });
 
-// ==================== LEARNING PLAN MANAGEMENT ====================
-router.get('/plans', async (req, res) => {
-  try {
-    const { status, page = 1, limit = 50 } = req.query;
-    
-    const query = {};
-    if (status) query.status = status;
+// ============= LEARNING PLAN MANAGEMENT =============
 
-    const plans = await LearningPlan.find(query)
+// Get learning plan statistics
+router.get('/learnings/stats', async (req, res) => {
+  try {
+    const total = await LearningPlan.countDocuments();
+    const active = await LearningPlan.countDocuments({ status: 'active' });
+    const completed = await LearningPlan.countDocuments({ status: 'completed' });
+
+    res.json({
+      total,
+      active,
+      completed
+    });
+  } catch (error) {
+    console.error('Error fetching learning stats:', error);
+    res.status(500).json({ error: 'Failed to fetch statistics' });
+  }
+});
+
+// Get all learning plans with pagination
+router.get('/learnings', async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const plans = await LearningPlan.find()
       .populate('user_id', 'name email')
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
+      .skip(skip)
+      .limit(parseInt(limit));
 
-    const total = await LearningPlan.countDocuments(query);
+    const total = await LearningPlan.countDocuments();
 
     res.json({
       plans,
       total,
       page: parseInt(page),
-      pages: Math.ceil(total / parseInt(limit))
+      pageSize: parseInt(limit),
+      totalPages: Math.ceil(total / parseInt(limit))
     });
   } catch (error) {
-    console.error('Error fetching plans:', error);
-    res.status(500).json({ error: 'Failed to fetch plans' });
+    console.error('Error fetching learning plans:', error);
+    res.status(500).json({ error: 'Failed to fetch learning plans' });
   }
 });
 
-router.delete('/plans/:planId', async (req, res) => {
+// Delete learning plan
+router.delete('/learnings/:id', async (req, res) => {
   try {
-    const plan = await LearningPlan.findByIdAndDelete(req.params.planId);
+    const plan = await LearningPlan.findByIdAndDelete(req.params.id);
     
     if (!plan) {
-      return res.status(404).json({ error: 'Plan not found' });
+      return res.status(404).json({ error: 'Learning plan not found' });
     }
 
-    res.json({ message: 'Plan deleted successfully' });
+    res.json({ message: 'Learning plan deleted successfully' });
   } catch (error) {
-    console.error('Error deleting plan:', error);
-    res.status(500).json({ error: 'Failed to delete plan' });
+    console.error('Error deleting learning plan:', error);
+    res.status(500).json({ error: 'Failed to delete learning plan' });
   }
 });
 
-// ==================== ACTIVITY LOG ====================
-router.get('/activity', async (req, res) => {
+// ============= DASHBOARD STATISTICS =============
+
+// Get overall dashboard statistics
+router.get('/stats/dashboard', async (req, res) => {
   try {
-    const { limit = 50 } = req.query;
-
-    // Get recent activities from different collections
-    const [recentUsers, recentExperiences, recentPlans] = await Promise.all([
-      User.find()
-        .select('name email createdAt')
-        .sort({ createdAt: -1 })
-        .limit(10),
-      Experience.find()
-        .select('company_name position_title createdAt')
-        .populate('user_id', 'name')
-        .sort({ createdAt: -1 })
-        .limit(10),
-      LearningPlan.find()
-        .select('plan_title technologies createdAt')
-        .populate('user_id', 'name')
-        .sort({ createdAt: -1 })
-        .limit(10)
-    ]);
-
-    // Combine and format activities
-    const activities = [
-      ...recentUsers.map(u => ({
-        type: 'user_joined',
-        user: u.name || u.email,
-        action: 'joined the platform',
-        timestamp: u.createdAt
-      })),
-      ...recentExperiences.map(e => ({
-        type: 'experience_shared',
-        user: e.user_id?.name || 'Anonymous',
-        action: `shared experience at ${e.company_name}`,
-        timestamp: e.createdAt
-      })),
-      ...recentPlans.map(p => ({
-        type: 'plan_created',
-        user: p.user_id?.name || 'Anonymous',
-        action: `created ${p.plan_title}`,
-        timestamp: p.createdAt
-      }))
-    ];
-
-    // Sort by timestamp and limit
-    activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    res.json({
-      activities: activities.slice(0, parseInt(limit))
-    });
-  } catch (error) {
-    console.error('Error fetching activity:', error);
-    res.status(500).json({ error: 'Failed to fetch activity log' });
-  }
-});
-
-// ==================== ANALYTICS ====================
-router.get('/analytics', async (req, res) => {
-  try {
-    const { period = '7d' } = req.query;
-    
-    // Calculate date range
-    const days = period === '7d' ? 7 : period === '30d' ? 30 : 90;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-
     const [
-      newUsers,
-      newExperiences,
-      newPlans,
-      topCompanies,
-      topColleges
+      totalUsers,
+      activeUsers,
+      totalExperiences,
+      totalLearningPlans,
+      recentUsers,
+      recentExperiences
     ] = await Promise.all([
-      User.countDocuments({ createdAt: { $gte: startDate } }),
-      Experience.countDocuments({ createdAt: { $gte: startDate } }),
-      LearningPlan.countDocuments({ createdAt: { $gte: startDate } }),
-      Experience.aggregate([
-        { $group: { _id: '$company_name', count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 10 }
-      ]),
-      User.aggregate([
-        { $match: { college: { $exists: true, $ne: null } } },
-        { $group: { _id: '$college', count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-        { $limit: 10 }
-      ])
+      User.countDocuments(),
+      User.countDocuments({ is_active: true }),
+      Experience.countDocuments(),
+      LearningPlan.countDocuments(),
+      User.find().sort({ createdAt: -1 }).limit(5).select('name email createdAt'),
+      Experience.find().sort({ createdAt: -1 }).limit(5).populate('user_id', 'name')
     ]);
 
     res.json({
-      period,
-      growth: {
-        users: newUsers,
-        experiences: newExperiences,
-        plans: newPlans
+      overview: {
+        totalUsers,
+        activeUsers,
+        totalExperiences,
+        totalLearningPlans
       },
-      topCompanies: topCompanies.map(c => ({ name: c._id, count: c.count })),
-      topColleges: topColleges.map(c => ({ name: c._id, count: c.count }))
+      recentActivity: {
+        users: recentUsers,
+        experiences: recentExperiences
+      }
     });
   } catch (error) {
-    console.error('Error fetching analytics:', error);
-    res.status(500).json({ error: 'Failed to fetch analytics' });
+    console.error('Error fetching dashboard stats:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard statistics' });
   }
 });
 
