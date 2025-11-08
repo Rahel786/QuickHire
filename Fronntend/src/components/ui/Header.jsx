@@ -1,16 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+// Full updated Header component with admin support:
+import React, { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import Icon from '../AppIcon';
 import Button from './Button';
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const location = useLocation();
   const { user, signOut } = useAuth();
-  const navigate = useNavigate();
-  const profileMenuRef = useRef(null);
 
   const navigationItems = [
     { label: 'Dashboard', path: '/user-dashboard', icon: 'LayoutDashboard' },
@@ -19,6 +17,9 @@ const Header = () => {
     { label: 'Jobs', path: '/job-search-results', icon: 'Briefcase' },
     { label: 'Learning', path: '/learning-resources', icon: 'BookOpen' },
     { label: 'Events', path: '/career-events-calendar', icon: 'Calendar' },
+    ...(user?.role === 'admin' ? [
+      { label: 'Admin', path: '/admin', icon: 'Shield', badge: 'Admin' }
+    ] : [])
   ];
 
   const isActivePath = (path) => location?.pathname === path;
@@ -31,28 +32,9 @@ const Header = () => {
     setIsMobileMenuOpen(false);
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
-        setIsProfileMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  const handleSignOut = async () => {
-    await signOut();
-    setIsProfileMenuOpen(false);
-    setIsMobileMenuOpen(false);
-    navigate('/login');
-  };
-
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 bg-card border-b border-border z-50 shadow-sm">
+      <header className="fixed top-0 left-0 right-0 bg-card border-b border-border z-100">
         <div className="flex items-center justify-between h-16 px-6">
           {/* Logo */}
           <Link to="/user-dashboard" className="flex items-center space-x-2">
@@ -68,7 +50,7 @@ const Header = () => {
               <Link
                 key={item?.path}
                 to={item?.path}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-smooth hover-scale ${
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-smooth hover-scale relative ${
                   isActivePath(item?.path)
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -76,6 +58,11 @@ const Header = () => {
               >
                 <Icon name={item?.icon} size={16} />
                 <span>{item?.label}</span>
+                {item?.badge && (
+                  <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                    {item?.badge}
+                  </span>
+                )}
               </Link>
             ))}
           </nav>
@@ -86,41 +73,24 @@ const Header = () => {
               <span className="sr-only">Notifications</span>
             </Button>
             {user ? (
-              <div className="relative" ref={profileMenuRef}>
-                <button
-                  onClick={() => setIsProfileMenuOpen((prev) => !prev)}
-                  className="flex items-center space-x-2 px-3 py-2 rounded-lg border border-border hover:bg-muted transition"
-                >
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm uppercase">
-                    {user?.name?.charAt(0) || user?.email?.charAt(0) || 'U'}
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm font-medium text-foreground">{user?.name || user?.email}</p>
-                    <p className="text-xs text-muted-foreground">Profile</p>
-                  </div>
-                  <Icon name={isProfileMenuOpen ? 'ChevronUp' : 'ChevronDown'} size={16} />
-                </button>
-
-                {isProfileMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-lg shadow-lg overflow-hidden z-[55]">
-                    <Link
-                      to="/profile"
-                      className="flex items-center px-4 py-2 text-sm text-foreground hover:bg-muted transition"
-                      onClick={() => setIsProfileMenuOpen(false)}
-                    >
-                      <Icon name="User" size={16} className="mr-2" />
-                      View Profile
-                    </Link>
-                    <button
-                      onClick={handleSignOut}
-                      className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition"
-                    >
-                      <Icon name="LogOut" size={16} className="mr-2" />
-                      Logout
-                    </button>
+              <>
+                {user.role === 'admin' && (
+                  <div className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded">
+                    Admin
                   </div>
                 )}
-              </div>
+                <Button 
+                  variant="ghost" 
+                  iconName="LogOut" 
+                  size="sm"
+                  onClick={async () => {
+                    await signOut();
+                    window.location.href = '/login';
+                  }}
+                >
+                  <span className="sr-only">Sign Out</span>
+                </Button>
+              </>
             ) : (
               <Link to="/login">
                 <Button variant="ghost" iconName="LogIn" size="sm">
@@ -142,16 +112,18 @@ const Header = () => {
           </Button>
         </div>
       </header>
+
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-[60] md:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 z-200 md:hidden"
           onClick={closeMobileMenu}
         />
       )}
+
       {/* Mobile Menu */}
       <div
-        className={`fixed top-0 right-0 h-full w-80 bg-card border-l border-border z-[60] transform transition-transform duration-300 md:hidden ${
+        className={`fixed top-0 right-0 h-full w-80 bg-card border-l border-border z-200 transform transition-transform duration-300 md:hidden ${
           isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -174,7 +146,7 @@ const Header = () => {
                 key={item?.path}
                 to={item?.path}
                 onClick={closeMobileMenu}
-                className={`flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-smooth ${
+                className={`flex items-center space-x-3 px-4 py-3 rounded-lg text-base font-medium transition-smooth relative ${
                   isActivePath(item?.path)
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -182,63 +154,48 @@ const Header = () => {
               >
                 <Icon name={item?.icon} size={20} />
                 <span>{item?.label}</span>
+                {item?.badge && (
+                  <span className="ml-auto px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                    {item?.badge}
+                  </span>
+                )}
               </Link>
             ))}
           </div>
 
           <div className="mt-8 pt-6 border-t border-border">
             <div className="space-y-2">
-              <Button
-                variant="ghost"
-                fullWidth
-                iconName="Bell"
-                iconPosition="left"
-                className="justify-start"
-              >
-                Notifications
-              </Button>
-              <Button
-                variant="ghost"
-                fullWidth
-                iconName="User"
-                iconPosition="left"
-                className="justify-start"
-                onClick={() => {
-                  closeMobileMenu();
-                  navigate('/profile');
-                }}
-              >
-                Profile
-              </Button>
-              <Button
-                variant="ghost"
-                fullWidth
-                iconName="Settings"
-                iconPosition="left"
-                className="justify-start"
-              >
-                Settings
-              </Button>
-              <Button
-                variant="ghost"
-                fullWidth
-                iconName="HelpCircle"
-                iconPosition="left"
-                className="justify-start"
-              >
-                Help
-              </Button>
               {user ? (
-                <Button
-                  variant="ghost"
-                  fullWidth
-                  iconName="LogOut"
-                  iconPosition="left"
-                  className="justify-start"
-                  onClick={handleSignOut}
-                >
-                  Sign Out
-                </Button>
+                <>
+                  {user.role === 'admin' && (
+                    <div className="px-4 py-2 bg-purple-100 text-purple-700 text-sm font-medium rounded-lg mb-2">
+                      👑 Administrator
+                    </div>
+                  )}
+                  <Button
+                    variant="ghost"
+                    fullWidth
+                    iconName="User"
+                    iconPosition="left"
+                    className="justify-start"
+                  >
+                    {user.name || user.email}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    fullWidth
+                    iconName="LogOut"
+                    iconPosition="left"
+                    className="justify-start"
+                    onClick={async () => {
+                      await signOut();
+                      closeMobileMenu();
+                      window.location.href = '/login';
+                    }}
+                  >
+                    Sign Out
+                  </Button>
+                </>
               ) : (
                 <Link
                   to="/login"
