@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useAuth } from '../../contexts/AuthContext';
 import Header from '../../components/ui/Header';
 import JobCard from './components/JobCard';
 import FilterPanel from './components/FilterPanel';
 import JobListSkeleton from './components/JobListSkeleton';
 import EmptyState from './components/EmptyState';
 import LoadMoreButton from './components/LoadMoreButton';
+import { Sparkles } from 'lucide-react';
 
 const JobSearchResults = () => {
+  const { user } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [filteredJobs, setFilteredJobs] = useState([]);
   const [displayedJobs, setDisplayedJobs] = useState([]);
@@ -15,6 +18,7 @@ const JobSearchResults = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showRelevantJobs, setShowRelevantJobs] = useState(false);
   const [filters, setFilters] = useState({
     search: '',
     location: '',
@@ -260,6 +264,41 @@ const JobSearchResults = () => {
   useEffect(() => {
     let filtered = [...jobs];
 
+    // Apply "My Relevant Jobs" filter first
+    if (showRelevantJobs && user) {
+      const userSkills = user?.technical_skills || [];
+      const userRoles = user?.interested_roles || [];
+      
+      if (userSkills.length > 0 || userRoles.length > 0) {
+        filtered = filtered.filter(job => {
+          // Check if job skills match user skills
+          const hasMatchingSkill = userSkills.length > 0 && job?.skills?.some(jobSkill => {
+            const jobSkillLower = jobSkill?.toLowerCase();
+            return userSkills.some(userSkill => {
+              const userSkillLower = userSkill?.toLowerCase();
+              // Check for exact match or partial match
+              return jobSkillLower === userSkillLower || 
+                     jobSkillLower.includes(userSkillLower) ||
+                     userSkillLower.includes(jobSkillLower);
+            });
+          });
+
+          // Check if job title matches user interested roles
+          const hasMatchingRole = userRoles.length > 0 && userRoles.some(role => {
+            const roleLower = role?.toLowerCase();
+            const jobTitleLower = job?.title?.toLowerCase();
+            return jobTitleLower.includes(roleLower) || roleLower.includes(jobTitleLower);
+          });
+
+          // Job is relevant if it matches skills OR roles
+          return hasMatchingSkill || hasMatchingRole;
+        });
+      } else {
+        // If user has no skills/roles, show no jobs
+        filtered = [];
+      }
+    }
+
     // Apply search filter
     if (filters?.search) {
       const searchTerm = filters?.search?.toLowerCase();
@@ -345,7 +384,7 @@ const JobSearchResults = () => {
 
     setFilteredJobs(filtered);
     setCurrentPage(1);
-  }, [jobs, filters]);
+  }, [jobs, filters, showRelevantJobs, user]);
 
   // Update displayed jobs based on pagination
   useEffect(() => {
@@ -392,14 +431,27 @@ const JobSearchResults = () => {
       salaryMax: '',
       sortBy: 'relevance'
     });
+    setShowRelevantJobs(false);
   };
+
+  const handleRelevantJobsToggle = () => {
+    setShowRelevantJobs(!showRelevantJobs);
+    // Reset to first page when toggling
+    setCurrentPage(1);
+  };
+
+  // Check if user has completed onboarding
+  const hasOnboardingData = user && (
+    (user?.technical_skills && user?.technical_skills.length > 0) ||
+    (user?.interested_roles && user?.interested_roles.length > 0)
+  );
 
   const retrySearch = () => {
     window.location?.reload();
   };
 
   const hasActiveFilters = () => {
-    return filters?.search || filters?.location || filters?.experienceLevel || 
+    return showRelevantJobs || filters?.search || filters?.location || filters?.experienceLevel || 
            filters?.companySize || (filters?.jobTypes && filters?.jobTypes?.length > 0) ||
            filters?.salaryMin || filters?.salaryMax;
   };
@@ -419,12 +471,36 @@ const JobSearchResults = () => {
           <div className="max-w-7xl mx-auto px-6">
             {/* Page Header */}
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-foreground mb-2">
-                Job Search Results
-              </h1>
-              <p className="text-muted-foreground">
-                Discover entry-level opportunities from top companies
-              </p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
+                <div>
+                  <h1 className="text-3xl font-bold text-foreground mb-2">
+                    Job Search Results
+                  </h1>
+                  <p className="text-muted-foreground">
+                    Discover entry-level opportunities from top companies
+                  </p>
+                </div>
+                {hasOnboardingData && (
+                  <button
+                    onClick={handleRelevantJobsToggle}
+                    className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center justify-center space-x-2 whitespace-nowrap ${
+                      showRelevantJobs
+                        ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700'
+                        : 'bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50'
+                    }`}
+                  >
+                    <Sparkles className={`w-5 h-5 ${showRelevantJobs ? 'text-white' : 'text-blue-600'}`} />
+                    <span>{showRelevantJobs ? 'Show All Jobs' : 'My Relevant Jobs'}</span>
+                  </button>
+                )}
+              </div>
+              {showRelevantJobs && hasOnboardingData && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>Showing jobs matching your profile:</strong> Based on your skills ({user?.technical_skills?.length || 0} skills) and interested roles ({user?.interested_roles?.length || 0} roles)
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Filter Panel */}

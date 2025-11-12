@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route } from "react-router-dom";
 import ScrollToTop from "./components/ScrollToTop";
 import ErrorBoundary from "./components/ErrorBoundary";
+import ProtectedRoute from "./components/ProtectedRoute";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -25,17 +26,17 @@ const Routes = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
         
-        {/* Main Routes */}
-        <Route path="/" element={<UserDashboard />} />
-        <Route path="/career-events-calendar" element={<CareerEventsCalendar />} />
-        <Route path="/user-dashboard" element={<UserDashboard />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/job-search-results" element={<JobSearchResults />} />
-        <Route path="/learning-resources" element={<LearningResources />} />
-        <Route path="/senior-experience-sharing" element={<SeniorExperienceSharing />} />
-        <Route path="/interview-tech-prep-planner" element={<InterviewTechPrepPlanner />} />
+        {/* Main Routes - Protected */}
+        <Route path="/" element={<ProtectedRoute><UserDashboard /></ProtectedRoute>} />
+        <Route path="/career-events-calendar" element={<ProtectedRoute><CareerEventsCalendar /></ProtectedRoute>} />
+        <Route path="/user-dashboard" element={<ProtectedRoute><UserDashboard /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/job-search-results" element={<ProtectedRoute><JobSearchResults /></ProtectedRoute>} />
+        <Route path="/learning-resources" element={<ProtectedRoute><LearningResources /></ProtectedRoute>} />
+        <Route path="/senior-experience-sharing" element={<ProtectedRoute><SeniorExperienceSharing /></ProtectedRoute>} />
+        <Route path="/interview-tech-prep-planner" element={<ProtectedRoute><InterviewTechPrepPlanner /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </RouterRoutes>
       </ErrorBoundary>

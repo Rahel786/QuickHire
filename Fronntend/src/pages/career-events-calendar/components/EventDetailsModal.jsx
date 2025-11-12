@@ -227,6 +227,17 @@ const EventDetailsModal = ({ event, isOpen, onClose, onRegister }) => {
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-4">
+            {event?.url && (
+              <Button
+                variant="default"
+                size="lg"
+                iconName="ExternalLink"
+                iconPosition="left"
+                onClick={() => window.open(event.url, '_blank', 'noopener,noreferrer')}
+              >
+                View on Eventbrite
+              </Button>
+            )}
             {event?.isRegistered ? (
               <>
                 <Button variant="outline" size="lg" iconName="Calendar" iconPosition="left">
@@ -239,7 +250,7 @@ const EventDetailsModal = ({ event, isOpen, onClose, onRegister }) => {
             ) : isRegistrationOpen() ? (
               <>
                 <Button
-                  variant="default"
+                  variant={event?.url ? "outline" : "default"}
                   size="lg"
                   iconName="UserPlus"
                   iconPosition="left"

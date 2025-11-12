@@ -23,6 +23,7 @@ const InterviewTechPrepPlanner = () => {
     explanationType: 'beginner'
   });
   const [generatedPlan, setGeneratedPlan] = useState(null);
+  const [currentPlanId, setCurrentPlanId] = useState(null); // Store plan ID when continuing a plan
   const [myPlans, setMyPlans] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -190,7 +191,7 @@ const InterviewTechPrepPlanner = () => {
         practice_questions: dayPlan?.questions,
         estimated_hours: dailyHours,
         is_completed: false,
-        interview_questions: getInterviewQuestions(techName, day, explanationType || 'beginner'),
+        interview_questions: getInterviewQuestions(techName, day, explanationType || 'beginner', totalDays),
         learning_context: getDayContent(techName, day, explanationType || 'beginner')
       });
     }
@@ -280,13 +281,19 @@ const InterviewTechPrepPlanner = () => {
 
       // Save to backend API
       try {
-        await learningsAPI.createPlan(planData);
+        const response = await learningsAPI.createPlan(planData);
+        const savedPlan = response?.plan || response;
+        const savedPlanId = savedPlan?._id || savedPlan?.id;
+        if (savedPlanId) {
+          setCurrentPlanId(savedPlanId);
+        }
         await loadMyPlans();
         setCurrentStep('view');
       } catch (apiError) {
         console.log('API save failed, saving to localStorage:', apiError);
         // Fallback to localStorage
         const planId = `plan_${Date.now()}`;
+        setCurrentPlanId(planId);
         const localData = {
           id: planId,
           user_id: user?.id || 'test_user',
@@ -316,7 +323,96 @@ const InterviewTechPrepPlanner = () => {
     setCurrentStep('select');
     setSelectedTech(null);
     setGeneratedPlan(null);
+    setCurrentPlanId(null);
     setPlanConfig({ totalDays: 7, dailyHours: 2, planTitle: '', explanationType: 'beginner' });
+  };
+
+  const handleContinuePlan = (plan) => {
+    // Load the plan data to continue learning
+    const technology = plan?.technologies || { name: plan?.technology_id || 'React' };
+    const config = {
+      totalDays: plan?.total_days || 7,
+      dailyHours: plan?.daily_hours || 2,
+      planTitle: plan?.plan_title || `${technology?.name} Interview Prep`,
+      explanationType: plan?.explanation_type || 'beginner'
+    };
+
+    // Transform daily_plans to match GeneratedPlan format
+    const dailyPlans = (plan?.daily_plans || []).map(day => ({
+      day_number: day?.day_number,
+      core_concepts: day?.core_concepts || [],
+      learning_resources: day?.learning_resources || [],
+      practice_questions: day?.practice_questions || [],
+      interview_questions: day?.interview_questions || [],
+      learning_context: day?.learning_context || '',
+      estimated_hours: day?.estimated_hours || config.dailyHours,
+      is_completed: day?.is_completed || false,
+      completed_at: day?.completed_at || null
+    }));
+
+    // Store plan ID for updates
+    const planId = plan?._id || plan?.id;
+    setCurrentPlanId(planId);
+
+    setSelectedTech(technology);
+    setPlanConfig(config);
+    setGeneratedPlan({
+      technology,
+      config,
+      dailyPlans
+    });
+    setCurrentStep('generate');
+  };
+
+  const handlePlanUpdate = async (planId, updatedDailyPlans) => {
+    try {
+      // Transform dailyPlans back to backend format
+      const daily_plans = updatedDailyPlans.map(day => ({
+        day_number: day?.day_number,
+        core_concepts: day?.core_concepts || [],
+        learning_resources: day?.learning_resources || [],
+        practice_questions: day?.practice_questions || [],
+        interview_questions: day?.interview_questions || [],
+        learning_context: day?.learning_context || '',
+        estimated_hours: day?.estimated_hours || planConfig?.dailyHours || 2,
+        is_completed: day?.is_completed || false,
+        completed_at: day?.completed_at || null
+      }));
+
+      // Update in backend
+      try {
+        await learningsAPI.updatePlan(planId, { daily_plans });
+        // Update local state
+        setGeneratedPlan(prev => ({
+          ...prev,
+          dailyPlans: updatedDailyPlans
+        }));
+        // Refresh my plans list
+        await loadMyPlans();
+      } catch (apiError) {
+        console.log('API update failed, updating localStorage:', apiError);
+        // Fallback to localStorage
+        const storedPlans = localStorage.getItem('prep_plans');
+        if (storedPlans) {
+          const plans = JSON.parse(storedPlans);
+          const updatedPlans = plans.map(p => {
+            if ((p._id || p.id) === planId) {
+              return { ...p, daily_plans };
+            }
+            return p;
+          });
+          localStorage.setItem('prep_plans', JSON.stringify(updatedPlans));
+          // Update local state
+          setGeneratedPlan(prev => ({
+            ...prev,
+            dailyPlans: updatedDailyPlans
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error updating plan:', error);
+      throw error;
+    }
   };
 
   // Removed authentication check for testing - all users can access
@@ -415,6 +511,8 @@ const InterviewTechPrepPlanner = () => {
               onSave={handleSavePlan}
               onBack={() => setCurrentStep('configure')}
               loading={loading}
+              planId={currentPlanId}
+              onPlanUpdate={handlePlanUpdate}
             />
           ) : (
             <div className="bg-white rounded-lg shadow-sm border p-12 flex flex-col items-center justify-center text-center">
@@ -430,6 +528,7 @@ const InterviewTechPrepPlanner = () => {
             plans={myPlans}
             onCreateNew={resetFlow}
             onRefresh={loadMyPlans}
+            onContinuePlan={handleContinuePlan}
           />
         )}
       </main>

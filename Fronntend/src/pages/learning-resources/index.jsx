@@ -8,6 +8,7 @@ import LearningProgress from './components/LearningProgress';
 import SearchAndFilter from './components/SearchAndFilter';
 import BookmarkedContent from './components/BookmarkedContent';
 import StudyNotes from './components/StudyNotes';
+import ResourceCard from './components/ResourceCard';
 
 const LearningResources = () => {
   const { user } = useAuth();
@@ -407,10 +408,81 @@ const LearningResources = () => {
 
   const tabs = [
     { id: 'topics', label: 'Learning Topics', icon: 'BookOpen' },
+    { id: 'resources', label: 'Resources', icon: 'Folder' },
     { id: 'progress', label: 'My Progress', icon: 'TrendingUp' },
     { id: 'bookmarks', label: 'Bookmarks', icon: 'Bookmark' },
     { id: 'notes', label: 'Study Notes', icon: 'FileText' }
   ];
+
+  // Learning Resources Data
+  const [resources, setResources] = useState([
+    {
+      id: 1,
+      title: 'DSA Cheat Sheet',
+      description: 'A comprehensive cheat sheet for Data Structures and Algorithms',
+      tags: ['cheatsheet', 'dsa'],
+      source: 'DRIVE',
+      url: 'https://docs.google.com/spreadsheets/d/1SB9SudeHrS729P38isNxwBIuB09p7wxa/edit?gid=367540931#gid=367540931' // Will be set by user
+    },
+    {
+      id: 2,
+      title: 'DSA Resources',
+      description: 'Interview Tips, Company wise DSA Questions, DSA Common Notes',
+      tags: ['interview', 'dsa'],
+      source: 'DRIVE',
+      url: 'https://drive.google.com/drive/folders/1Da_v5uHIvBscWcRRgMsYGq-hJ00dQL9Y'
+    },
+    {
+      id: 3,
+      title: 'Placement Material',
+      description: 'Service Based Questions, Aptitude, Company wise Questions, DSA Common Notes',
+      tags: ['placement', 'aptitude'],
+      source: 'DRIVE',
+      url: 'https://drive.google.com/drive/folders/1NC5wLHUMUye5_5zHzSgTgXDUdVmh43ZU'
+    },
+    {
+      id: 4,
+      title: 'Aptitude Material',
+      description: 'A comprehensive Material With Important Topics in Aptitude',
+      tags: ['aptitude'],
+      source: 'DRIVE',
+      url: 'https://drive.google.com/drive/folders/1Ks8MWfWahrVwOQ4qFRQiSdS32TcbBXGR'
+    },
+    {
+      id: 5,
+      title: 'Job Resources',
+      description: 'Interview Tips, Company wise DSA Questions, DSA Common Notes',
+      tags: ['job', 'interview'],
+      source: 'DRIVE',
+      url: 'https://drive.google.com/drive/folders/1TrQ1Z3qO_KYx0-rU9i32GNUy1DeT2ZUr'
+    },
+    {
+      id: 6,
+      title: 'Company Wise Hr List',
+      description: 'Hr Details for Cold Emailing',
+      tags: ['hr', 'email'],
+      source: 'DRIVE',
+      url: 'https://drive.google.com/drive/folders/1G1KlT8qw_r5gd0R0qtjrKjfRk_Bq9acY'
+    },
+    {
+      id: 7,
+      title: 'Cold Emailing Template',
+      description: 'Templates For Cold Emailing',
+      tags: ['email', 'template'],
+      source: 'DRIVE',
+      url: 'https://drive.google.com/file/d/1ytI4OVc_IANFGS_nZ3BB9yVui4fucsLd/edit'
+    }
+  ]);
+
+  const handleViewResource = (resource) => {
+    if (resource.url && resource.url.trim() !== '') {
+      // Open resource URL in new tab
+      window.open(resource.url, '_blank', 'noopener,noreferrer');
+    } else {
+      // If no URL is set, show alert or do nothing
+      alert(`URL not configured for "${resource.title}". Please contact administrator.`);
+    }
+  };
 
   // Filter and search logic
   const getFilteredTopics = () => {
@@ -773,6 +845,20 @@ const LearningResources = () => {
                   </div>
                 )}
               </>
+            )}
+
+            {activeTab === 'resources' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {resources.map((resource) => (
+                    <ResourceCard
+                      key={resource.id}
+                      resource={resource}
+                      onViewResource={handleViewResource}
+                    />
+                  ))}
+                </div>
+              </div>
             )}
 
             {activeTab === 'progress' && (

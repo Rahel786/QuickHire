@@ -1,10 +1,10 @@
-
-
 import React from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const ProtectedRoute = ({ children, fallback = null }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -15,14 +15,8 @@ const ProtectedRoute = ({ children, fallback = null }) => {
   }
 
   if (!user) {
-    return fallback || (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
-          <p className="text-gray-600">Please sign in to access this page.</p>
-        </div>
-      </div>
-    );
+    // Redirect to login with return path
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   return children;

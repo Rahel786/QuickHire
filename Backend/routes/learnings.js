@@ -51,9 +51,10 @@ Schema: { dailyPlans: Array<{ day_number: number, core_concepts: string[], learn
 Daily study time: ${hours} hours per day.
 Requirements per day:
 - 3-5 core_concepts
-- 2-4 learning_resources (URLs or titles)
-- At least 5 practice_questions
-- At least 5 interview_questions with concise answers (2-4 sentences)
+- 2-4 learning_resources (URLs of respctive technology) and 1 best youtube video for each technology
+- 1-2 github repositories for each technology where it is used in real world/production use cases and best practices
+- At least 7 practice_questions
+- At least 5 interview_questions with concise answers (7-9 sentences) along with real world/production use cases
 - 1-2 sentence learning_context
 Return exactly ${days} entries with day_number starting at 1 and increasing by 1.`;
 

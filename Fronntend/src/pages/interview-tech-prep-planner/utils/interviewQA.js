@@ -1,33 +1,49 @@
 // Interview Q&A generator based on tech stack and explanation level
-export const getInterviewQuestions = (tech, day, level) => {
+export const getInterviewQuestions = (tech, day, level, totalDays = 7) => {
+  // Check if we need extended answerType (2-3 lines) for React/Java/JavaScript with 2 or 4 days
+  const needsExtendedAnswerType = (totalDays === 2 || totalDays === 4) && 
+                                   ['React', 'Java', 'JavaScript'].includes(tech);
+  
   const questions = {
     'React': {
       beginner: [
         {
           question: "What is JSX and why do we use it?",
           answer: "JSX is a syntax extension for JavaScript that allows writing HTML-like code in JavaScript. We use it because it makes React code more readable and allows us to describe UI structure clearly. It gets compiled to React.createElement calls.",
-          answerType: "Clear and simple explanation with practical benefit",
-          impressTip: "Mention that JSX is syntactic sugar and show you understand the compilation process"
+          answerType: needsExtendedAnswerType 
+            ? "This is a clear and simple explanation that demonstrates understanding of both the syntax and practical benefits. The answer shows you know JSX is syntactic sugar that compiles to React.createElement, which is exactly what interviewers want to hear."
+            : "Clear and simple explanation with practical benefit",
+          impressTip: "Mention that JSX is syntactic sugar and show you understand the compilation process",
+          useAPIForImpress: needsExtendedAnswerType
         },
         {
           question: "Explain the difference between props and state",
           answer: "Props are read-only data passed from parent to child components, while state is mutable data managed within a component. Props flow down, state is internal. When state changes, component re-renders.",
-          answerType: "Contrast both concepts with key differences",
-          impressTip: "Give a quick example: 'Props are like function parameters, state is like variables inside a function'"
+          answerType: needsExtendedAnswerType
+            ? "This answer contrasts both concepts effectively by highlighting key differences: props are read-only and flow down, while state is mutable and internal. The explanation shows understanding of React's unidirectional data flow and re-rendering mechanism."
+            : "Contrast both concepts with key differences",
+          impressTip: "Give a quick example: 'Props are like function parameters, state is like variables inside a function'",
+          useAPIForImpress: needsExtendedAnswerType
         }
       ],
       intermediate: [
         {
           question: "How would you optimize a React component that re-renders too often?",
           answer: "I would use React.memo for functional components to prevent unnecessary re-renders, useMemo for expensive calculations, and useCallback for function references. I'd also check if state updates are batched properly and consider splitting large components.",
-          answerType: "Multiple solutions with specific tools",
-          impressTip: "Mention you'd first use React DevTools Profiler to identify the issue before optimizing"
+          answerType: needsExtendedAnswerType
+            ? "This answer demonstrates a systematic approach to optimization by listing multiple React-specific tools (React.memo, useMemo, useCallback) and showing understanding of React's rendering behavior. The answer shows you know to identify the problem first before applying solutions."
+            : "Multiple solutions with specific tools",
+          impressTip: "Mention you'd first use React DevTools Profiler to identify the issue before optimizing",
+          useAPIForImpress: needsExtendedAnswerType
         },
         {
           question: "Explain useEffect and its dependency array",
           answer: "useEffect runs side effects after render. The dependency array controls when it runs: empty array means run once on mount, no array means run on every render, and with dependencies means run when those values change. Always include all used variables in dependencies.",
-          answerType: "Comprehensive explanation with all scenarios",
-          impressTip: "Mention cleanup functions and give a real example like API calls or subscriptions"
+          answerType: needsExtendedAnswerType
+            ? "This comprehensive explanation covers all scenarios of useEffect usage: mount-only, every render, and conditional execution. It demonstrates deep understanding of React's effect system and best practices for dependency management, which is crucial for avoiding bugs."
+            : "Comprehensive explanation with all scenarios",
+          impressTip: "Mention cleanup functions and give a real example like API calls or subscriptions",
+          useAPIForImpress: needsExtendedAnswerType
         }
       ],
       advanced: [
@@ -44,16 +60,22 @@ export const getInterviewQuestions = (tech, day, level) => {
         {
           question: "What is inheritance and how does it work in Java?",
           answer: "Inheritance allows a class to inherit properties and methods from another class. In Java, we use the 'extends' keyword. The child class (subclass) inherits from the parent class (superclass). This promotes code reusability and establishes an 'is-a' relationship.",
-          answerType: "Definition with practical benefit",
-          impressTip: "Mention the difference between 'is-a' (inheritance) and 'has-a' (composition) relationships"
+          answerType: needsExtendedAnswerType
+            ? "This answer provides a clear definition with practical benefits, explaining both the syntax ('extends' keyword) and the conceptual relationship ('is-a'). It demonstrates understanding of OOP principles and code reusability, which are fundamental Java concepts."
+            : "Definition with practical benefit",
+          impressTip: "Mention the difference between 'is-a' (inheritance) and 'has-a' (composition) relationships",
+          useAPIForImpress: needsExtendedAnswerType
         }
       ],
       intermediate: [
         {
           question: "Explain the difference between ArrayList and LinkedList",
           answer: "ArrayList is backed by a dynamic array, providing O(1) random access but O(n) insertion/deletion in middle. LinkedList uses nodes with pointers, providing O(1) insertion/deletion but O(n) random access. Use ArrayList when you need frequent random access, LinkedList when you need frequent insertions/deletions.",
-          answerType: "Comparison with use cases and complexity analysis",
-          impressTip: "Mention the memory overhead of LinkedList (pointer storage) vs ArrayList"
+          answerType: needsExtendedAnswerType
+            ? "This answer provides a thorough comparison by explaining the underlying data structures (dynamic array vs nodes with pointers), time complexity for different operations, and practical use cases. It demonstrates understanding of both theoretical concepts and practical application in Java development."
+            : "Comparison with use cases and complexity analysis",
+          impressTip: "Mention the memory overhead of LinkedList (pointer storage) vs ArrayList",
+          useAPIForImpress: needsExtendedAnswerType
         }
       ],
       advanced: [
@@ -128,9 +150,15 @@ export const getInterviewQuestions = (tech, day, level) => {
   const startIdx = ((day - 1) * questionsPerDay) % levelQuestions.length;
   const endIdx = Math.min(startIdx + questionsPerDay, levelQuestions.length);
   
-  return levelQuestions.slice(startIdx, endIdx).length > 0 
+  const selectedQuestions = levelQuestions.slice(startIdx, endIdx).length > 0 
     ? levelQuestions.slice(startIdx, endIdx)
     : levelQuestions.slice(0, Math.min(questionsPerDay, levelQuestions.length));
+  
+  // Add useAPIForImpress flag to all questions if needed
+  return selectedQuestions.map(q => ({
+    ...q,
+    useAPIForImpress: q.useAPIForImpress || false
+  }));
 };
 
 export const getDayContent = (tech, day, level) => {
@@ -149,6 +177,11 @@ export const getDayContent = (tech, day, level) => {
       beginner: `Learn the basics of querying databases. Start with SELECT, WHERE, and basic JOINs. Understand data types and how to filter and sort data. Practice writing simple queries first.`,
       intermediate: `Master complex queries with multiple JOINs, subqueries, and window functions. Understand indexing, query optimization, and database design principles.`,
       advanced: `Deep dive into database internals, transaction management, isolation levels, and advanced optimization techniques. Understand distributed databases and scaling strategies.`
+    },
+    'JavaScript': {
+      beginner: `Focus on core JavaScript concepts: variables (var, let, const), functions, closures, and scope. Understand how JavaScript handles asynchronous operations. Practice with DOM manipulation and event handling.`,
+      intermediate: `Master advanced JavaScript features: promises, async/await, the event loop, and prototypal inheritance. Understand how JavaScript's single-threaded nature works with asynchronous code. Practice building complex applications.`,
+      advanced: `Deep dive into JavaScript internals: V8 engine, memory management, performance optimization, and advanced patterns. Understand how modern frameworks work under the hood and optimize for production.`
     },
     'Data Structures & Algorithms': {
       beginner: `Start with pattern recognition. Two pointers is about using two references to traverse data efficiently. Focus on understanding time and space complexity. Practice explaining your approach before coding.`,

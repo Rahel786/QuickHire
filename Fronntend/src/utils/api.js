@@ -6,7 +6,7 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:80
 // Create axios instance with default config
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000,
+  timeout: 100000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -350,6 +350,118 @@ export const learningsAPI = {
       console.error('Error deleting learning plan:', error);
       throw error;
     }
+  },
+
+  // Get "How to Impress" tip from LLM API
+  getImpressTip: async (question, technology, answer, explanationType = 'beginner') => {
+    try {
+      const response = await apiClient.post('/learnings/impress-tip', {
+        question,
+        technology,
+        answer,
+        explanationType
+      });
+      return response.data?.impressTip || response.data?.tip || null;
+    } catch (error) {
+      console.error('Error fetching impress tip:', error);
+      // Return fallback tip if API fails
+      return `Demonstrate deep understanding by connecting this concept to real-world applications and showing how it relates to ${technology} best practices.`;
+    }
+  }
+};
+
+// API endpoints for events
+export const eventsAPI = {
+  // Fetch events from Eventbrite API (requires API key)
+  getEventbriteEvents: async (searchQuery = 'technology', location = 'India') => {
+    try {
+      const token = import.meta.env.VITE_EVENTBRITE_TOKEN;
+      
+      // Skip if no token is provided
+      if (!token || token === 'YOUR_TOKEN_HERE') {
+        return null;
+      }
+
+      const queryParams = new URLSearchParams({
+        q: searchQuery,
+        'location.address': location || 'India',
+        'sort_by': 'date',
+        'expand': 'venue,organizer',
+        'status': 'live'
+      });
+      
+      const response = await fetch(
+        `https://www.eventbriteapi.com/v3/events/search/?${queryParams.toString()}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Eventbrite API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Eventbrite API error:', error);
+      return null;
+    }
+  },
+
+  // Fetch from public events aggregator (no auth required)
+  getPublicTechEvents: async () => {
+    try {
+      // Using Eventful API (public, no auth required for basic searches)
+      // Alternative: You can also use Meetup API, Eventbrite public search, etc.
+      const response = await fetch(
+        `https://api.eventful.com/json/events/search?app_key=${import.meta.env.VITE_EVENTFUL_KEY || 'YOUR_KEY'}&keywords=technology+programming+software&date=Future&page_size=50&sort_order=date`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch events');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Public events API error:', error);
+      return null;
+    }
+  },
+
+  // Transform Eventbrite events to our format
+  transformEventbriteEvent: (eventbriteEvent) => {
+    const venue = eventbriteEvent.venue || {};
+    const startDate = eventbriteEvent.start ? new Date(eventbriteEvent.start.local) : new Date();
+    
+    return {
+      id: eventbriteEvent.id,
+      title: eventbriteEvent.name?.text || 'Untitled Event',
+      company: eventbriteEvent.organizer?.name || 'Event Organizer',
+      companyLogo: eventbriteEvent.logo?.url || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=100&h=100&fit=crop&crop=center',
+      type: eventbriteEvent.category_id ? 'webinar' : 'networking',
+      date: startDate.toISOString().split('T')[0],
+      time: startDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      duration: eventbriteEvent.end ? 
+        `${Math.round((new Date(eventbriteEvent.end.local) - new Date(eventbriteEvent.start.local)) / (1000 * 60 * 60))} hours` : 
+        '2 hours',
+      format: venue.address ? 'offline' : 'online',
+      location: venue.address ? 
+        `${venue.address.localized_area_display || ''} ${venue.address.city || ''}, ${venue.address.region || ''}`.trim() : 
+        null,
+      description: eventbriteEvent.description?.text || eventbriteEvent.summary || 'No description available.',
+      participants: eventbriteEvent.capacity || 0,
+      registrationDeadline: eventbriteEvent.end_sales_date || eventbriteEvent.start?.local,
+      cost: eventbriteEvent.is_free ? null : (eventbriteEvent.ticket_availability?.minimum_ticket_price?.display || 'Free'),
+      isRegistered: false,
+      requirements: [],
+      speakers: [],
+      url: eventbriteEvent.url || null
+    };
   }
 };
 

@@ -14,9 +14,8 @@ const PlanConfiguration = ({ selectedTech, config, onConfigSubmit, onBack }) => 
     { value: 4, label: '4 Days', description: 'Essential topics with practice' },
     { value: 6, label: '6 Days', description: 'Comprehensive coverage' },
     { value: 7, label: '1 Week', description: 'Detailed study with projects' },
-    { value: 14, label: '2 Weeks', description: 'In-depth preparation' },
-    { value: 21, label: '3 Weeks', description: 'Master-level preparation' },
-    { value: 30, label: '1 Month', description: 'Complete mastery with advanced topics' }
+    { value: 8, label: '8 Days', description: 'Extended preparation with practice' },
+    { value: 14, label: '2 Weeks', description: 'In-depth preparation' }
   ];
 
   const hourOptions = [

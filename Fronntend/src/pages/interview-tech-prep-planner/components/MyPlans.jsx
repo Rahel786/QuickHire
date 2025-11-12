@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, Calendar, Clock, BookOpen, CheckCircle, Play, Trash2, RefreshCw, Award } from 'lucide-react';
+import { Plus, Calendar, Clock, BookOpen, CheckCircle, Play, Trash2, RefreshCw, Award, ArrowRight } from 'lucide-react';
 import { learningsAPI } from '../../../utils/api';
 
-const MyPlans = ({ plans, onCreateNew, onRefresh }) => {
+const MyPlans = ({ plans, onCreateNew, onRefresh, onContinuePlan }) => {
   const [loading, setLoading] = useState(false);
   const [expandedPlan, setExpandedPlan] = useState(null);
 
@@ -236,15 +236,27 @@ const MyPlans = ({ plans, onCreateNew, onRefresh }) => {
                     {/* Actions */}
                     <div className="flex flex-col space-y-2 ml-4">
                       <button
+                        onClick={() => onContinuePlan?.(plan)}
+                        className={`inline-flex items-center justify-center px-5 py-2.5 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm hover:shadow-md ${
+                          isCompleted 
+                            ? 'bg-green-600 hover:bg-green-700' 
+                            : 'bg-purple-600 hover:bg-purple-700'
+                        }`}
+                      >
+                        <Play className="h-4 w-4 mr-1.5" />
+                        {isCompleted ? 'Review Plan' : 'Continue Learning'}
+                        <ArrowRight className="h-4 w-4 ml-1.5" />
+                      </button>
+                      <button
                         onClick={() => setExpandedPlan(isExpanded ? null : planKey)}
-                        className="text-purple-600 hover:text-purple-800 text-sm font-medium"
+                        className="text-purple-600 hover:text-purple-800 text-sm font-medium py-1"
                       >
                         {isExpanded ? 'Hide Details' : 'View Details'}
                       </button>
                       <button
                         onClick={() => handleDeletePlan(planKey)}
                         disabled={loading}
-                        className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
+                        className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50 py-1"
                       >
                         <Trash2 className="h-4 w-4 inline mr-1" />
                         Delete

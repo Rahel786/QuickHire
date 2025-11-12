@@ -106,12 +106,23 @@ const EventFilters = ({ filters, onFiltersChange, onClearFilters }) => {
           onChange={(e) => handleFilterChange('search', e?.target?.value)}
         />
 
-        <Input
+        <Select
           label="Location"
-          type="text"
-          placeholder="Enter city or location..."
-          value={filters?.location}
-          onChange={(e) => handleFilterChange('location', e?.target?.value)}
+          options={[
+            { value: 'India', label: 'All India' },
+            { value: 'Bangalore', label: 'Bangalore' },
+            { value: 'Mumbai', label: 'Mumbai' },
+            { value: 'Delhi', label: 'Delhi/NCR' },
+            { value: 'Hyderabad', label: 'Hyderabad' },
+            { value: 'Chennai', label: 'Chennai' },
+            { value: 'Pune', label: 'Pune' },
+            { value: 'Kolkata', label: 'Kolkata' },
+            { value: 'Online', label: 'Online' }
+          ]}
+          value={filters?.location || 'India'}
+          onChange={(value) => handleFilterChange('location', value)}
+          placeholder="Select location"
+          searchable
         />
       </div>
       {hasActiveFilters && (

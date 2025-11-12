@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Mail, Lock, LogIn, AlertCircle, Eye, EyeOff, UserPlus, ArrowLeft, User, Building2, GraduationCap, Briefcase, Calendar } from 'lucide-react';
 import Header from '../components/ui/Header';
@@ -28,6 +28,7 @@ const Login = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSendOTP = async () => {
     if (!email?.trim()) {
@@ -154,12 +155,16 @@ const Login = () => {
   };
 
   const handleSuccessComplete = () => {
-    // Check if user needs onboarding, otherwise go to dashboard
+    // Check if there's a return path from protected route redirect
+    const from = location.state?.from?.pathname || null;
+    
+    // Check if user needs onboarding
     const userData = JSON.parse(localStorage.getItem('user') || '{}');
     if (!userData.onboarding_completed) {
       navigate('/onboarding', { replace: true });
     } else {
-      navigate('/user-dashboard', { replace: true });
+      // Redirect to original destination or dashboard
+      navigate(from || '/user-dashboard', { replace: true });
     }
   };
 
