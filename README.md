@@ -12,22 +12,23 @@ QuickHire is a full-stack recruitment platform designed to simplify job posting,
 
 🗂️ Secure Backend with Validation + Error Handling
 
-🧱 Tech Stack
-Frontend
+🧱 Tech Stack:
+Frontend:
   React.js
   Tailwind CSS
   Axios
   React Router
 
-Backend
+Backend:
   Node.js / Express.js
   MongoDB + Mongoose
   JWT Authentication
   bcrypt for password hashing
   
-DevOps / Tools
+DevOps / Tools:
   GitHub
   Postman
+
 
 
 
